@@ -1,0 +1,6 @@
+[project]
+name = "orbi"
+version = "0.0.0"
+description = "Local-first terminal agent — Phase 0 foundation"
+requires-python = ">=3.12,<3.13"
+dependencies = ["mlx-lm==0.31.3"]

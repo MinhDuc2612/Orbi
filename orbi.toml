@@ -1,0 +1,32 @@
+# Phase 0 skeleton. Relative paths are relative to this code directory.
+[paths]
+code_dir = "."
+model_dir = "models"
+db_path = "orbi.db"
+backup_dir = "" # Choose a directory outside code/ before enabling Phase 1 backups.
+
+# Candidates copied from ../Orbimodels.md; no model is selected or installed.
+[lanes.a]
+# Ranked: Qwen3.8-27B + CMoE, Qwen3.8-Flash-Next, Gemma 4 26B-A4B, Granite 4.1 8B.
+model = ""
+
+[lanes.b]
+# Specialists: canary-qwen-2.5b, Qwen3-ASR-1.7B, Qwen3-TTS-12Hz-1.7B,
+# Qwen3-Omni-30B-A3B, PaddleOCR-VL-1.6, Harrier-oss-v1-27B,
+# Qwen3-Reranker-4B, Harrier-oss-v1-0.6B, granite-guardian-4.1-8b,
+# MiLMMT-46-12B, Qwen-Image-2512, Wan 2.7, Hunyuan3D-2.1, Molmo2-8B.
+# Phase 5 revisits Wan 3.0 and Hunyuan3D v3; Omni cannot co-load with Lane A.
+model = ""
+
+[lanes.c]
+# Kimi-K3, Qwen3.8-2.4T-A95B, DeepSeek-V4-Pro-0813, GLM-5.2,
+# GLM-5.3, GLM-5.3-Flash, DeepSeek-V4-Flash-0731. Parked until the external drive exists.
+model = ""
+
+[budget]
+monthly = 0 # Local and free tiers only.
+
+[memory]
+max_items = 12
+max_chars = 4000
+max_ms = 300
