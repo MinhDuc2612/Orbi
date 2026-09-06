@@ -1,0 +1,728 @@
+{
+  "version": 1,
+  "frozen_on": "2026-09-06",
+  "sources": [
+    "../Orbiplan.md: The three lanes and How the router actually decides",
+    "../Orbimodels.md: Lane B and Lane C job tables",
+    "../Researchhub/sample3/OrbiOSS.md: skill taxonomy, documents, speech, generation and reasoning"
+  ],
+  "limitations": "Created before candidate quality evaluation because the requested referenced 20-prompt set was absent. This is a small, explicit benchmark taxonomy, not certification of all 341 or 1074 research skills. Routing classifies hypothetical requests; attachments need not exist. Tools are synthetic and are never executed. A single deterministic run measures these fixtures, not broad tool safety or repeated-run reliability. Do not change prompts or expected answers after observing a candidate result; version any later benchmark separately.",
+  "routing_policy": [
+    "Return exactly one JSON object with skill and lane. Choose a skill from skill_taxonomy and the associated uppercase lane A, B or C. Do not solve the task.",
+    "Lane A is the default for ordinary questions, supplied-text edits or summaries, small clear code changes and memory lookups.",
+    "A requested specialist artifact or operation goes to B: OCR, audio transcription or synthesis, embedding computation, translation, image/video/3D generation, coordinate grounding or retrieval reranking.",
+    "Classify by the requested output, not keyword mentions: editing an image prompt is text_edit; summarizing an existing transcript is text_summary; explaining a short C function is general_assistance.",
+    "Use C only for substantial technical research synthesis, difficult proofs or algorithm design, or cross-component debugging requiring deep reasoning. Ordinary coding does not automatically need C.",
+    "Classify the ideal lane by need even if the corresponding specialist is not installed yet. This is a routing benchmark, not permission to run or download a model."
+  ],
+  "skill_taxonomy": {
+    "general_assistance": {
+      "lane": "A",
+      "description": "Ordinary conversation, familiar explanations and short code explanations that need no specialist."
+    },
+    "text_edit": {
+      "lane": "A",
+      "description": "Rewrite or correct supplied text, including a prompt intended for a future media job."
+    },
+    "code_edit": {
+      "lane": "A",
+      "description": "Small, localized code fixes whose cause and intended behavior are clear."
+    },
+    "text_summary": {
+      "lane": "A",
+      "description": "Summarize text already available; an existing transcript does not require speech recognition."
+    },
+    "memory_lookup": {
+      "lane": "A",
+      "description": "Look up an existing remembered fact; do not confuse using memory with explicitly computing embeddings."
+    },
+    "document_ocr": {
+      "lane": "B",
+      "description": "Extract text, tables or document structure from scanned pages or document images."
+    },
+    "speech_recognition": {
+      "lane": "B",
+      "description": "Convert an audio recording to written words, optionally with timestamps."
+    },
+    "speech_synthesis": {
+      "lane": "B",
+      "description": "Produce spoken audio from supplied text."
+    },
+    "embedding": {
+      "lane": "B",
+      "description": "Compute semantic vectors for supplied text or documents."
+    },
+    "translation": {
+      "lane": "B",
+      "description": "Translate content between languages, preserving meaning and required terminology."
+    },
+    "image_generation": {
+      "lane": "B",
+      "description": "Render or edit an actual image artifact; writing only a textual image prompt stays in A."
+    },
+    "video_generation": {
+      "lane": "B",
+      "description": "Generate an actual moving-image clip as a queued media job."
+    },
+    "model3d_generation": {
+      "lane": "B",
+      "description": "Generate a three-dimensional mesh or textured 3D asset."
+    },
+    "visual_grounding": {
+      "lane": "B",
+      "description": "Locate or point to objects in an image using coordinates or bounding boxes."
+    },
+    "reranking": {
+      "lane": "B",
+      "description": "Reorder supplied retrieval candidates by relevance to a query using the retrieval specialist."
+    },
+    "formal_reasoning": {
+      "lane": "C",
+      "description": "Difficult mathematical proof or formal reasoning with several interacting conditions."
+    },
+    "algorithmic_coding": {
+      "lane": "C",
+      "description": "Substantial algorithm design with correctness proofs and demanding complexity constraints."
+    },
+    "deep_research": {
+      "lane": "C",
+      "description": "Synthesize a large body of technical research and resolve conflicting evidence; not a routine lookup."
+    },
+    "architecture_debugging": {
+      "lane": "C",
+      "description": "Difficult cross-component system reasoning, concurrency diagnosis and a substantial verified repair."
+    }
+  },
+  "routing": [
+    {
+      "id": "r01",
+      "prompt": "In two sentences, explain why a computer can have plenty of free SSD space and still run out of RAM.",
+      "expected": {
+        "skill": "general_assistance",
+        "lane": "A"
+      }
+    },
+    {
+      "id": "r02",
+      "prompt": "Polish this image prompt so it is less repetitive: \"a blue blue glass bird on a plain plain background\". Return only the revised words; I am not asking you to render it.",
+      "expected": {
+        "skill": "text_edit",
+        "lane": "A"
+      }
+    },
+    {
+      "id": "r03",
+      "prompt": "Fix this one-line off-by-one bug: def first_three(xs): return xs[:2]. The function must return up to the first three elements, preserving their order.",
+      "expected": {
+        "skill": "code_edit",
+        "lane": "A"
+      }
+    },
+    {
+      "id": "r04",
+      "prompt": "Turn this existing transcript into two action items: \"Mai: I will send the draft Tuesday. Duc: I will review it Wednesday. Mai: Great, then we can publish Friday.\"",
+      "expected": {
+        "skill": "text_summary",
+        "lane": "A"
+      }
+    },
+    {
+      "id": "r05",
+      "prompt": "What date did I previously tell you I wanted the Orbi demo ready? Check this project's saved notes.",
+      "expected": {
+        "skill": "memory_lookup",
+        "lane": "A"
+      }
+    },
+    {
+      "id": "r06",
+      "prompt": "Explain what this C function returns, without changing it: int twice(int x) { return x + x; }",
+      "expected": {
+        "skill": "general_assistance",
+        "lane": "A"
+      }
+    },
+    {
+      "id": "r07",
+      "prompt": "This attachment is a skewed scan of a two-column invoice. Extract its line-item table as rows and columns, preserving the printed amounts.",
+      "expected": {
+        "skill": "document_ocr",
+        "lane": "B"
+      }
+    },
+    {
+      "id": "r08",
+      "prompt": "The attached meeting.m4a switches between English and Vietnamese. Write down the spoken words and give their timestamps; there is no transcript yet.",
+      "expected": {
+        "skill": "speech_recognition",
+        "lane": "B"
+      }
+    },
+    {
+      "id": "r09",
+      "prompt": "Make a spoken Vietnamese audio file saying \"Chào Minh Đức, bản sao lưu đã hoàn tất.\" Use the default voice.",
+      "expected": {
+        "skill": "speech_synthesis",
+        "lane": "B"
+      }
+    },
+    {
+      "id": "r10",
+      "prompt": "For each of these 200 support articles, compute the semantic vector we can put in our similarity index. I need vectors, not a prose summary.",
+      "expected": {
+        "skill": "embedding",
+        "lane": "B"
+      }
+    },
+    {
+      "id": "r11",
+      "prompt": "Convert this French customer message into natural Vietnamese while keeping product names unchanged: \"Bonjour, mon appareil Orbi Mini ne démarre plus depuis hier.\"",
+      "expected": {
+        "skill": "translation",
+        "lane": "B"
+      }
+    },
+    {
+      "id": "r12",
+      "prompt": "Render a square cover image showing a tiny blue glass bird on a cream background. Give me the finished picture.",
+      "expected": {
+        "skill": "image_generation",
+        "lane": "B"
+      }
+    },
+    {
+      "id": "r13",
+      "prompt": "Create a five-second looping clip of a paper boat drifting across a quiet pond. Queue the render and return the video when ready.",
+      "expected": {
+        "skill": "video_generation",
+        "lane": "B"
+      }
+    },
+    {
+      "id": "r14",
+      "prompt": "Turn this reference sketch into a textured low-poly chair mesh that I can import into Blender.",
+      "expected": {
+        "skill": "model3d_generation",
+        "lane": "B"
+      }
+    },
+    {
+      "id": "r15",
+      "prompt": "In the attached desktop screenshot, return the pixel bounding box of the small settings gear in the upper right. Do not click it.",
+      "expected": {
+        "skill": "visual_grounding",
+        "lane": "B"
+      }
+    },
+    {
+      "id": "r16",
+      "prompt": "Our search already returned 40 article snippets for \"SQLite snapshot backups during writes\". Reorder those candidates by relevance to that query; do not search for more documents.",
+      "expected": {
+        "skill": "reranking",
+        "lane": "B"
+      }
+    },
+    {
+      "id": "r17",
+      "prompt": "Prove or refute the conjecture in the attached 12-page note about adversarial online matching with delayed arrivals. The proof must cover arbitrary arrival order, give a tight competitive bound and handle the stated counterexample.",
+      "expected": {
+        "skill": "formal_reasoning",
+        "lane": "C"
+      }
+    },
+    {
+      "id": "r18",
+      "prompt": "Design and implement a fully dynamic graph connectivity algorithm for a million vertices under edge insertions and deletions. Give a rigorous amortized complexity argument, address adversarial update sequences and produce stress tests against a slow reference.",
+      "expected": {
+        "skill": "algorithmic_coding",
+        "lane": "C"
+      }
+    },
+    {
+      "id": "r19",
+      "prompt": "Audit these 30 recent expert-paging papers and their benchmark artifacts. Resolve the contradictory SSD throughput claims by reconstructing their workloads, identify which conclusions survive normalization, and cite the primary evidence in a technical report. I can wait for a thorough analysis.",
+      "expected": {
+        "skill": "deep_research",
+        "lane": "C"
+      }
+    },
+    {
+      "id": "r20",
+      "prompt": "Diagnose this intermittent double-charge bug spanning our payment API, job queue and reconciliation service. The three attached modules pass unit tests but fail under worker crashes and message redelivery. Derive the failing interleavings, design a migration that preserves existing transactions and implement a cross-service regression test.",
+      "expected": {
+        "skill": "architecture_debugging",
+        "lane": "C"
+      }
+    }
+  ],
+  "tool_policy": "For this synthetic benchmark, emit exactly one tool call that fulfills the request. Do not execute anything or provide a prose answer. Use only listed tools. Preserve requested strings and array order; use documented defaults for omitted options. All schema properties are required, including null project for global scope and empty tags when none are requested.",
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "read_file",
+        "description": "Read a synthetic text file. Line numbers start at 1. If omitted, use start_line=1 and max_lines=200.",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "start_line": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_lines": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          "required": [
+            "path",
+            "start_line",
+            "max_lines"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "search_files",
+        "description": "Search synthetic files. paths contains exactly the requested paths or glob patterns, in requested order. Set literal=true for literal text, false for regex. Default case_sensitive=false and literal=true.",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "case_sensitive": {
+              "type": "boolean"
+            },
+            "literal": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "query",
+            "paths",
+            "case_sensitive",
+            "literal"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "remember",
+        "description": "Store exactly the supplied fact in synthetic memory. Preserve text. Global facts use project=null; project facts use the named project directory. Use tags=[] when none are requested.",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "global",
+                "project"
+              ]
+            },
+            "project": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "The project directory for project scope; null for global scope."
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "text",
+            "scope",
+            "project",
+            "tags"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "recall",
+        "description": "Retrieve synthetic memory using exactly the supplied query. Global scope uses project=null; project scope requires its directory. The default limit is 5, maximum 12.",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "global",
+                "project"
+              ]
+            },
+            "project": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "The project directory for project scope; null for global scope."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+            }
+          },
+          "required": [
+            "query",
+            "scope",
+            "project",
+            "limit"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "calculate",
+        "description": "Perform one arithmetic aggregation on the supplied numeric values in order. Pass the operation and values to the tool, not a precomputed answer.",
+        "strict": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "operation": {
+              "type": "string",
+              "enum": [
+                "sum",
+                "product",
+                "mean",
+                "minimum",
+                "maximum"
+              ]
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "operation",
+            "values"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }
+  ],
+  "tool_calls": [
+    {
+      "id": "t01",
+      "prompt": "Show the first 30 lines of src/main.py.",
+      "expected": {
+        "name": "read_file",
+        "arguments": {
+          "path": "src/main.py",
+          "start_line": 1,
+          "max_lines": 30
+        }
+      }
+    },
+    {
+      "id": "t02",
+      "prompt": "Read 12 lines of docs/Design Notes.md starting at line 41.",
+      "expected": {
+        "name": "read_file",
+        "arguments": {
+          "path": "docs/Design Notes.md",
+          "start_line": 41,
+          "max_lines": 12
+        }
+      }
+    },
+    {
+      "id": "t03",
+      "prompt": "Open the file whose exact path is reports/\"September\".md. Use the default line range.",
+      "expected": {
+        "name": "read_file",
+        "arguments": {
+          "path": "reports/\"September\".md",
+          "start_line": 1,
+          "max_lines": 200
+        }
+      }
+    },
+    {
+      "id": "t04",
+      "prompt": "Read the first 7 lines of ghi-chú/Đức.txt.",
+      "expected": {
+        "name": "read_file",
+        "arguments": {
+          "path": "ghi-chú/Đức.txt",
+          "start_line": 1,
+          "max_lines": 7
+        }
+      }
+    },
+    {
+      "id": "t05",
+      "prompt": "Look for the literal text TODO in src/*.py and tests/*.py, in that order. Match case exactly.",
+      "expected": {
+        "name": "search_files",
+        "arguments": {
+          "query": "TODO",
+          "paths": [
+            "src/*.py",
+            "tests/*.py"
+          ],
+          "case_sensitive": true,
+          "literal": true
+        }
+      }
+    },
+    {
+      "id": "t06",
+      "prompt": "Find the literal text \"quoted\" in docs/*.md, ignoring case. The two double-quote characters are part of the search text.",
+      "expected": {
+        "name": "search_files",
+        "arguments": {
+          "query": "\"quoted\"",
+          "paths": [
+            "docs/*.md"
+          ],
+          "case_sensitive": false,
+          "literal": true
+        }
+      }
+    },
+    {
+      "id": "t07",
+      "prompt": "Use this regex to search src/*.py: ^def [a-z_]+\\(. Search case-sensitively.",
+      "expected": {
+        "name": "search_files",
+        "arguments": {
+          "query": "^def [a-z_]+\\(",
+          "paths": [
+            "src/*.py"
+          ],
+          "case_sensitive": true,
+          "literal": false
+        }
+      }
+    },
+    {
+      "id": "t08",
+      "prompt": "Search notes/*.md for the literal Windows path C:\\Users\\Minh, ignoring case.",
+      "expected": {
+        "name": "search_files",
+        "arguments": {
+          "query": "C:\\Users\\Minh",
+          "paths": [
+            "notes/*.md"
+          ],
+          "case_sensitive": false,
+          "literal": true
+        }
+      }
+    },
+    {
+      "id": "t09",
+      "prompt": "Remember this exact fact globally, with the tag language: I prefer replies in Vietnamese.",
+      "expected": {
+        "name": "remember",
+        "arguments": {
+          "text": "I prefer replies in Vietnamese.",
+          "scope": "global",
+          "project": null,
+          "tags": [
+            "language"
+          ]
+        }
+      }
+    },
+    {
+      "id": "t10",
+      "prompt": "For project /workspace/demo-one, remember this exact fact with tags database and architecture, in that order: This project uses SQLite, not PostgreSQL.",
+      "expected": {
+        "name": "remember",
+        "arguments": {
+          "text": "This project uses SQLite, not PostgreSQL.",
+          "scope": "project",
+          "project": "/workspace/demo-one",
+          "tags": [
+            "database",
+            "architecture"
+          ]
+        }
+      }
+    },
+    {
+      "id": "t11",
+      "prompt": "Save the following two lines as one global fact, with no tags. Preserve the newline:\nLine one says \"hello\".\nDòng hai: xin chào.",
+      "expected": {
+        "name": "remember",
+        "arguments": {
+          "text": "Line one says \"hello\".\nDòng hai: xin chào.",
+          "scope": "global",
+          "project": null,
+          "tags": []
+        }
+      }
+    },
+    {
+      "id": "t12",
+      "prompt": "For project /workspace/Đồ án, store this exact fact without tags: The demo title is \"Orbi 🌐\".",
+      "expected": {
+        "name": "remember",
+        "arguments": {
+          "text": "The demo title is \"Orbi 🌐\".",
+          "scope": "project",
+          "project": "/workspace/Đồ án",
+          "tags": []
+        }
+      }
+    },
+    {
+      "id": "t13",
+      "prompt": "Search my global memory with the exact query \"preferred language\" and return at most 3 items. The surrounding quotes delimit the query and are not part of it.",
+      "expected": {
+        "name": "recall",
+        "arguments": {
+          "query": "preferred language",
+          "scope": "global",
+          "project": null,
+          "limit": 3
+        }
+      }
+    },
+    {
+      "id": "t14",
+      "prompt": "In project /workspace/demo-one, look up the exact query backup schedule with the default result limit.",
+      "expected": {
+        "name": "recall",
+        "arguments": {
+          "query": "backup schedule",
+          "scope": "project",
+          "project": "/workspace/demo-one",
+          "limit": 5
+        }
+      }
+    },
+    {
+      "id": "t15",
+      "prompt": "Search only global memory for the exact query travel preferences, returning no more than 1 item.",
+      "expected": {
+        "name": "recall",
+        "arguments": {
+          "query": "travel preferences",
+          "scope": "global",
+          "project": null,
+          "limit": 1
+        }
+      }
+    },
+    {
+      "id": "t16",
+      "prompt": "For project /workspace/Đồ án, retrieve at most 12 memories matching the exact query ngày trình diễn.",
+      "expected": {
+        "name": "recall",
+        "arguments": {
+          "query": "ngày trình diễn",
+          "scope": "project",
+          "project": "/workspace/Đồ án",
+          "limit": 12
+        }
+      }
+    },
+    {
+      "id": "t17",
+      "prompt": "Use the arithmetic tool to add 2.5, -3 and 10, in that order.",
+      "expected": {
+        "name": "calculate",
+        "arguments": {
+          "operation": "sum",
+          "values": [
+            2.5,
+            -3,
+            10
+          ]
+        }
+      }
+    },
+    {
+      "id": "t18",
+      "prompt": "Ask the calculator for the product of 7, 0 and -2, preserving that input order.",
+      "expected": {
+        "name": "calculate",
+        "arguments": {
+          "operation": "product",
+          "values": [
+            7,
+            0,
+            -2
+          ]
+        }
+      }
+    },
+    {
+      "id": "t19",
+      "prompt": "Compute the mean of 10, 20, 30 and 40 with the arithmetic tool. Send those four input values in that order.",
+      "expected": {
+        "name": "calculate",
+        "arguments": {
+          "operation": "mean",
+          "values": [
+            10,
+            20,
+            30,
+            40
+          ]
+        }
+      }
+    },
+    {
+      "id": "t20",
+      "prompt": "Find the minimum among -0.5, 0.25 and 9 using the arithmetic tool, in that input order.",
+      "expected": {
+        "name": "calculate",
+        "arguments": {
+          "operation": "minimum",
+          "values": [
+            -0.5,
+            0.25,
+            9
+          ]
+        }
+      }
+    }
+  ]
+}

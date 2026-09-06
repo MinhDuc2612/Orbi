@@ -94,3 +94,42 @@ At official [CMoE revision 42dfc947](https://github.com/JarvisPei/CMoE/tree/42df
   fine-tuning call in the published runner; these are source findings, not executed errors.
 
 A dense, unconverted Qwen or a differently trained MoE would not be this candidate.
+
+
+## Candidate 3: Gemma 4 26B-A4B
+
+**Download in progress; all four gates unmeasured.** Ordered fallback after candidate 1's
+measured speed failure and candidate 2's implementation blocker.
+
+- Official model: [google/gemma-4-26B-A4B-it](https://huggingface.co/google/gemma-4-26B-A4B-it),
+  revision `4d7ae4984b7db7de8f8457170b3f1a419ee76d52`; Apache-2.0 in the current official card.
+- Quantization: [unsloth/gemma-4-26B-A4B-it-GGUF](https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/tree/c099eb48e663fd284577b04978a94ffccb261841),
+  revision `c099eb48e663fd284577b04978a94ffccb261841`.
+- File: `gemma-4-26B-A4B-it-UD-IQ4_XS.gguf`, **13,597,177,568 bytes**.
+  Expected SHA-256: `babd1e389d386352f71600765d37390f7dc993fbfad6725caccf996ffe34aecf`.
+- Same b10809 runtime; intended flags: `-lm mmap -ngl 99 -fa on -ctk q8_0 -ctv q8_0
+  -np 1 -c 4096 -t 8 --jinja --reasoning off --offline --perf`.
+  Context is capped at 4,096 for these gates; larger contexts are not certified by this run.
+
+### Frozen quality and RAM protocol
+
+`bench_cases.json` contains 20 routing requests and 20 synthetic tool requests. Its SHA-256 is
+`fdcf669576169038916ba421e097ba9fee3854aae01873c5b6e6f25287e3e86d`.
+The referenced prompt set was absent from Task 2, so these cases were created and frozen before
+seeing any candidate's quality output. They sample the plan's skill/lane policy; they do not
+certify every skill in the research taxonomy. No synthetic function is executed.
+
+`benchmark.py` evaluates the model plus llama.cpp's native tool parser and strict function
+schemas through its local HTTP API. Valid tool JSON and exact intended arguments are reported
+separately. Routing requires exact skill/lane JSON; requests use temperature 0 and seed 42.
+The RAM gate maintains generation load for at least 600 seconds and samples process RSS,
+system pressure and free-memory percentage every five seconds. Pass criterion set before the
+run: pressure remains normal and system free-memory percentage stays at least 10%.
+The sampled RSS maximum is labeled as such; `/usr/bin/time -l` additionally records the
+server's process high-water RSS after shutdown.
+
+```sh
+.venv/bin/python benchmark.py speed --output .session/gemma-speed.json
+.venv/bin/python benchmark.py quality --output .session/gemma-quality.json
+.venv/bin/python benchmark.py soak --pid SERVER_PID --output .session/gemma-soak.json
+```
