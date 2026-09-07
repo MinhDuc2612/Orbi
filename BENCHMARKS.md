@@ -213,8 +213,12 @@ Download verified: **258.27 seconds**, exact size and SHA-256 matched. b10809 co
 mapped GPU model buffer and 340 MiB Q8 KV cache.
 Throughput: **17.4853 tok/s**. This passes gate (a), but **does not beat the 19.48 tok/s
 baseline required in the task context**. Routing: **19/20**. Tool calls: **20/20 schema-valid
-JSON**, **14/20 exact intended arguments**. The ten-minute pressure run is in progress.
-No Lane A winner is declared from these partial results.
+JSON**, **14/20 exact intended arguments**. The completed RAM gate passed after
+**605.39 seconds**: all 120 samples had normal pressure, minimum free memory **63%**,
+sampled peak RSS **7,059,750,912 bytes**, process high-water RSS **7,060,520,960 bytes**.
+Global GPU in-use memory peaked at **6,503,481,344 bytes**, including other applications.
+All four explicit gates pass, but the additional baseline requirement fails. Lane A remains
+unchosen; passing 15 tok/s does not imply beating 19.48 tok/s.
 
 Testing IBM's smaller **Q3_K_M variant of the same candidate** next, with all four gates
 measured independently. Its pinned revision is unchanged; size **4,347,048,608 bytes**,
@@ -225,3 +229,25 @@ The RAM evaluator now also rejects runs with zero completed generation requests.
 Deterministic checks cover normal pressure, recovered warning pressure, sampling errors,
 and no completed load. This does not rescore previous real runs, which all completed many
 requests; synthetic checks are not model scores.
+
+
+Q3_K_M download completed in **233.07 seconds**, exact size and full SHA-256 verified.
+The first Q3 startup attempt failed before model loading with `OSError: [Errno 48] Address
+already in use`. There was no live listener after the Q4 shutdown; enabling SO_REUSEADDR
+in the port preflight resolved the TIME_WAIT collision. The retry loaded successfully.
+Q3 throughput measured **15.6914 tok/s**, slower than Q4 and below the baseline.
+The operator stopped the quality subprocess after this finding; incomplete quality is
+**unscored**, RAM skipped. Exact wrapper error: `RuntimeError('quality exited -15 without a
+fresh result')`. This was an operator stop, not a spontaneous model failure. Process
+high-water RSS before stopping: **4,863,442,944 bytes**.
+
+
+### Gemma whole-layer placement retest (2026-09-07)
+
+Reusing the existing IQ4_XS weights, `-ngl 27 --no-repack --no-op-offload` puts three
+of 30 transformer layers plus the output layer on CPU (27/31 layers offloaded). This
+corrects the initial shorthand description of "four complete layers": only three are
+transformer blocks. Throughput **23.3135 tok/s** beats the baseline. Early pressure is
+normal with **31% free memory**, but the mapped GPU buffer still reports 12,952.19 MiB;
+no reduced physical residency or causal improvement is inferred from the flag alone.
+Quality and a full ten-minute memory run are pending. Evidence uses `.session/gemma-layers4-*`.
