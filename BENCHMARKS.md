@@ -168,6 +168,39 @@ unchanged. This measures the usable constrained-output integration, not unconstr
 Same frozen cases and model, routing schema enforced through the server API:
 **26.1991 tok/s**, **20/20 routing**, **20/20 schema-valid tool JSON**, **19/20 exact arguments**.
 The original regex mismatch remains; no expected answer or prompt was edited to hide it.
-The ten-minute memory-pressure run is in progress. The live model-load log confirms 31/31
+The completed ten-minute memory-pressure run failed, as detailed below. The model-load log confirms 31/31
 layers on GPU, flash attention enabled, a 12,952.19 MiB mapped model buffer and 175.31 MiB
 of Q8 KV cache. These allocation figures must not be confused with CPU RSS.
+
+Full-GPU gate (d) **FAILED** after **606.30 seconds**: minimum system free memory **13%**,
+kernel warning pressure (level 2). Sampled peak RSS **9,851,535,360 bytes**; true process
+high-water RSS **12,086,706,176 bytes**. This is a real ten-minute failure, despite passing
+speed and quality. Preserved as `.session/*-full-gpu.*`. Retrying the same model with the
+first four expert layers on CPU (`--n-cpu-moe 4 --no-repack --no-op-offload`) to reduce
+GPU residency. No gate threshold or fixture is relaxed.
+
+
+### CPU-expert retry (2026-09-07)
+
+The same Gemma weights with `--n-cpu-moe 4 --no-repack --no-op-offload` reached
+**23.2194 tok/s**, **20/20 routing**, **20/20 schema-valid tool JSON**, and **19/20 exact
+arguments**. Warning memory pressure persisted; the GPU mapped model buffer remained
+12,952.19 MiB. The operator stopped this retry after **363.82 seconds**. This is **not** a
+second ten-minute measurement. The resulting `RemoteDisconnected('Remote end closed
+connection without response')` and shutdown signal were operator-induced.
+Sampled peak RSS **2,833,924,096 bytes**, process high-water RSS **9,793,257,472 bytes**,
+minimum system free memory **13%**. Global GPU in-use memory peaked at **14,637,809,664
+bytes**, including other applications. Evidence: `.session/*-cpu4.*`.
+Gemma has not passed gate (d); its full-GPU 606.30-second failure remains recorded above.
+
+## Candidate 4: Granite 4.1 8B — transfer in progress
+
+The final candidate uses IBM's official Apache-2.0
+[GGUF publication](https://huggingface.co/ibm-granite/granite-4.1-8b-GGUF/tree/865b82c2e7970d82e3731278c88c57ae7138359c).
+Pinned revision: `865b82c2e7970d82e3731278c88c57ae7138359c`.
+File: `granite-4.1-8b-Q4_K_M.gguf`, **5,347,914,400 bytes** (the actual artifact is larger
+than the plan's approximately 4.3 GB estimate).
+Expected SHA-256: `ed902ac9eb6adce5a90c6a08c8ea201b50e23fdc5976d1cd0362006afac5309e`.
+The transfer must pass full size/hash verification before loading. All GPU layers, mmap,
+Q8 KV, flash attention, 4,096 context, batch/ubatch 128, eight threads, and the same frozen
+quality fixtures will be used. No throughput or gate result is inferred from qwen3:8b.
