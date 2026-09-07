@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 from pathlib import Path
+import plistlib
 import re
 import subprocess
 import threading
@@ -82,12 +83,18 @@ def matches(value, schema):
 def quality(url):
     cases = json.loads(Path(__file__).with_name("bench_cases.json").read_text())
     system = "\n".join(cases["routing_policy"]) + "\n" + json.dumps(cases["skill_taxonomy"])
+    route_format = {"type": "json_schema", "json_schema": {"name": "route", "strict": True,
+        "schema": {"type": "object", "properties": {
+            "skill": {"type": "string", "enum": list(cases["skill_taxonomy"])},
+            "lane": {"type": "string", "enum": ["A", "B", "C"]}},
+            "required": ["skill", "lane"], "additionalProperties": False}}}
     routing, calls = [], []
     for case in cases["routing"]:
         row = dict(id=case["id"], correct=False)
         try:
             row["response"] = chat(url, [{"role": "system", "content": system},
-                                         {"role": "user", "content": case["prompt"]}])
+                                         {"role": "user", "content": case["prompt"]}],
+                                   response_format=route_format)
             message = row["response"]["choices"][0]["message"]
             row["actual"] = strict_json(message["content"])
             row["correct"] = row["actual"] == case["expected"]
@@ -131,6 +138,8 @@ def command(*args):
 
 
 def sample_memory(pid, started):
+    devices = plistlib.loads(command("ioreg", "-r", "-c", "AGXAccelerator", "-a").encode())
+    gpu = next(d["PerformanceStatistics"] for d in devices if "PerformanceStatistics" in d)
     return dict(
         elapsed_s=time.monotonic() - started,
         rss_bytes=int(command("ps", "-p", str(pid), "-o", "rss=")) * 1024,
@@ -138,6 +147,8 @@ def sample_memory(pid, started):
         free_percent=int(re.search(r"free percentage: (\d+)%",
                                     command("memory_pressure", "-Q"))[1]),
         swap=command("sysctl", "-n", "vm.swapusage"),
+        gpu_in_use_bytes=int(gpu["In use system memory"]),
+        gpu_allocated_bytes=int(gpu["Alloc system memory"]),
     )
 
 
@@ -180,6 +191,8 @@ def soak(url, pid, duration):
               and all(s["pressure"] == 1 and s["free_percent"] >= 10 for s in samples))
     return dict(passed=bool(passed), duration_s=time.monotonic() - started,
                 peak_sampled_rss_bytes=max((s["rss_bytes"] for s in samples), default=0),
+                peak_sampled_gpu_in_use_bytes=max((s["gpu_in_use_bytes"] for s in samples), default=0),
+                peak_sampled_gpu_allocated_bytes=max((s["gpu_allocated_bytes"] for s in samples), default=0),
                 sampling_interval_s=5,
                 minimum_free_percent=min((s["free_percent"] for s in samples), default=0),
                 samples=samples, rates=rates, errors=errors)

@@ -5,9 +5,9 @@ model_dir = "models"
 db_path = "orbi.db"
 backup_dir = "" # Choose a directory outside code/ before enabling Phase 1 backups.
 
-# Candidates copied from ../Orbimodels.md; no model is selected or installed.
+# Lane A selection is pending; installed benchmark weights stay in models/.
 [lanes.a]
-# Ranked: Qwen3.8-27B + CMoE, Qwen3.8-Flash-Next, Gemma 4 26B-A4B, Granite 4.1 8B.
+# Ranked: Qwen3.8-Flash-Next, Qwen3.8-27B + CMoE, Gemma 4 26B-A4B, Granite 4.1 8B.
 model = ""
 
 [lanes.b]

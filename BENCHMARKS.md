@@ -98,7 +98,7 @@ A dense, unconverted Qwen or a differently trained MoE would not be this candida
 
 ## Candidate 3: Gemma 4 26B-A4B
 
-**Download in progress; all four gates unmeasured.** Ordered fallback after candidate 1's
+**Downloaded and hash-verified; first speed/quality run completed.** Ordered fallback after candidate 1's
 measured speed failure and candidate 2's implementation blocker.
 
 - Official model: [google/gemma-4-26B-A4B-it](https://huggingface.co/google/gemma-4-26B-A4B-it),
@@ -110,6 +110,9 @@ measured speed failure and candidate 2's implementation blocker.
 - Same b10809 runtime; intended flags: `-lm mmap -ngl 99 -fa on -ctk q8_0 -ctv q8_0
   -np 1 -c 4096 -t 8 --jinja --reasoning off --offline --perf`.
   Context is capped at 4,096 for these gates; larger contexts are not certified by this run.
+- Quantization scope: this is the publisher’s GGUF importance quantization for the requested
+  llama.cpp runtime. The plan’s MLX-only DWQ procedure does not apply to a GGUF file; no DWQ
+  result or equivalent quality is claimed. Flash attention and Q8 KV must be confirmed in the load log.
 
 ### Frozen quality and RAM protocol
 
@@ -133,3 +136,38 @@ server's process high-water RSS after shutdown.
 .venv/bin/python benchmark.py quality --output .session/gemma-quality.json
 .venv/bin/python benchmark.py soak --pid SERVER_PID --output .session/gemma-soak.json
 ```
+
+2026-09-07 recovery: the initial Xet transfer exited 1 after exhausting retries:
+
+```text
+RuntimeError: Task error: File reconstruction error: CAS Client Error: Format error: I/O error: error decoding response body
+```
+
+No final Gemma weight file or verified hash was produced. Retrying the same pinned artifact
+with resumable HTTP; no new candidate or quantization has been selected.
+
+
+### First Gemma run (2026-09-07)
+
+HTTP recovery completed with exit 0 in **863.10 seconds**, all 13,597,177,568 bytes and
+SHA-256 verified before loading. Throughput: **25.2986 tok/s**, beating the 19.48 reference.
+Routing's required flat JSON shape passed **1/20**. Post-hoc inspection found all **20/20
+skill/lane choices correct**, but 19 replies used nested objects or Markdown fences. This
+inspection does not replace the failed format gate. Tool calls: **20/20 schema-valid JSON**,
+**19/20 exact arguments**; `t07` added punctuation/escaping to the requested regex.
+Process high-water RSS: **4,276,174,848 bytes**. RAM soak skipped after the quality gate failed.
+
+The original outputs are preserved under `.session/*-unconstrained.*`. Retesting the same frozen
+cases with a standard strict JSON response schema for routing; enums allow every listed skill
+and lane and do not encode expected answers. Tool schemas, prompts, seed and temperature stay
+unchanged. This measures the usable constrained-output integration, not unconstrained formatting.
+
+
+### Constrained routing retest (2026-09-07)
+
+Same frozen cases and model, routing schema enforced through the server API:
+**26.1991 tok/s**, **20/20 routing**, **20/20 schema-valid tool JSON**, **19/20 exact arguments**.
+The original regex mismatch remains; no expected answer or prompt was edited to hide it.
+The ten-minute memory-pressure run is in progress. The live model-load log confirms 31/31
+layers on GPU, flash attention enabled, a 12,952.19 MiB mapped model buffer and 175.31 MiB
+of Q8 KV cache. These allocation figures must not be confused with CPU RSS.

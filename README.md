@@ -1,8 +1,8 @@
 # Orbi
 
-Orbi is a planned local-first terminal agent that routes tasks to open models
-and remembers context. Phase 0 provides Python 3.12 and MLX tooling only;
-agent features and model downloads have not started.
+Orbi is a local-first terminal agent being built to route tasks to open models
+and remember context. Phase 0 is complete. Phase 1 is measuring Lane A first;
+the CLI, memory and orbs are still pending. See [BENCHMARKS.md](BENCHMARKS.md).
 
 Run the foundation health check from this directory:
 
