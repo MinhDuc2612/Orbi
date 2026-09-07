@@ -193,7 +193,7 @@ minimum system free memory **13%**. Global GPU in-use memory peaked at **14,637,
 bytes**, including other applications. Evidence: `.session/*-cpu4.*`.
 Gemma has not passed gate (d); its full-GPU 606.30-second failure remains recorded above.
 
-## Candidate 4: Granite 4.1 8B — transfer in progress
+## Candidate 4: Granite 4.1 8B — gates in progress
 
 The final candidate uses IBM's official Apache-2.0
 [GGUF publication](https://huggingface.co/ibm-granite/granite-4.1-8b-GGUF/tree/865b82c2e7970d82e3731278c88c57ae7138359c).
@@ -204,3 +204,24 @@ Expected SHA-256: `ed902ac9eb6adce5a90c6a08c8ea201b50e23fdc5976d1cd0362006afac53
 The transfer must pass full size/hash verification before loading. All GPU layers, mmap,
 Q8 KV, flash attention, 4,096 context, batch/ubatch 128, eight threads, and the same frozen
 quality fixtures will be used. No throughput or gate result is inferred from qwen3:8b.
+
+
+### Granite Q4_K_M (2026-09-07)
+
+Download verified: **258.27 seconds**, exact size and SHA-256 matched. b10809 confirms
+**8.79 billion parameters**, 41/41 layers on GPU, flash attention enabled, 5,096.77 MiB
+mapped GPU model buffer and 340 MiB Q8 KV cache.
+Throughput: **17.4853 tok/s**. This passes gate (a), but **does not beat the 19.48 tok/s
+baseline required in the task context**. Routing: **19/20**. Tool calls: **20/20 schema-valid
+JSON**, **14/20 exact intended arguments**. The ten-minute pressure run is in progress.
+No Lane A winner is declared from these partial results.
+
+Testing IBM's smaller **Q3_K_M variant of the same candidate** next, with all four gates
+measured independently. Its pinned revision is unchanged; size **4,347,048,608 bytes**,
+SHA-256 `b099e58ec0a71a368fa68f08f1ea66c0f0e96fe13d621482f8456bbf4c213ad9`.
+It will load only after the Q4 server has stopped and the download's full hash is verified.
+
+The RAM evaluator now also rejects runs with zero completed generation requests.
+Deterministic checks cover normal pressure, recovered warning pressure, sampling errors,
+and no completed load. This does not rescore previous real runs, which all completed many
+requests; synthetic checks are not model scores.

@@ -88,6 +88,37 @@ def main():
     assert not result["passed"] and result["routing_score"] == 20
     assert result["tool_validity"] == result["tool_exact"] == 10
     rejects(lambda: b.soak("http://unused", 1, 599))
+    healthy = [dict(elapsed_s=elapsed, pressure=1, free_percent=25,
+                    rss_bytes=1024, gpu_in_use_bytes=2048, gpu_allocated_bytes=4096)
+               for elapsed in (0, 300, 600)]
+    warning = deepcopy(healthy)
+    warning[1]["pressure"] = 2  # A recovered warning must still fail the gate.
+    for samples, completes, passed, errors in (
+            (healthy, True, True, []),
+            (warning, True, False, []),
+            (healthy, False, False, []),
+            ([healthy[0], RuntimeError("sampler failed")], True, False,
+             ["RuntimeError('sampler failed')"])):
+        with patch.object(b.threading, "Thread") as thread, \
+                patch.object(b.threading.Event, "wait", return_value=False), \
+                patch.object(b.time, "monotonic", side_effect=[0, 600, 600]), \
+                patch.object(b, "sample_memory", side_effect=samples), \
+                patch.object(b, "chat") as chat, redirect_stdout(io.StringIO()):
+            def complete(*args, **kwargs):
+                # Drive monitoring during a mocked request, without waiting or inference.
+                thread.call_args.kwargs["target"]()
+                return completion()
+            if completes:
+                chat.side_effect = complete
+            else:
+                thread.return_value.start.side_effect = lambda: thread.call_args.kwargs["target"]()
+            result = b.soak("http://unused", 1, 600)
+            assert chat.call_count == int(completes)
+        assert result["passed"] is passed and result["errors"] == errors
+        assert result["rates"] == ([20] if completes else [])
+        assert result["samples"] == (samples[:1] if errors else samples)
+        assert result["peak_sampled_rss_bytes"] == 1024
+        assert result["peak_sampled_gpu_in_use_bytes"] == 2048
     print("PASS: synthetic benchmark evaluator checks; no real model score measured.")
 
 

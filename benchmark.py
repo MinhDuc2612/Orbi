@@ -187,7 +187,7 @@ def soak(url, pid, duration):
         done.set()
     finally:
         worker.join(timeout=15)
-    passed = (not errors and samples and samples[-1]["elapsed_s"] >= duration
+    passed = (not errors and rates and samples and samples[-1]["elapsed_s"] >= duration
               and all(s["pressure"] == 1 and s["free_percent"] >= 10 for s in samples))
     return dict(passed=bool(passed), duration_s=time.monotonic() - started,
                 peak_sampled_rss_bytes=max((s["rss_bytes"] for s in samples), default=0),
