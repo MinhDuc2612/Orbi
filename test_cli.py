@@ -11,12 +11,137 @@ import select
 import signal
 import sqlite3
 import subprocess
+import sys
 import time
 import tomllib
 import uuid
+from unittest.mock import Mock, patch
 
 import orbi
 from setup_orbi import verify
+
+
+def control_checks():
+    """Deterministic control-flow checks; no model inference or model scores."""
+    root = Path(__file__).resolve().parent
+    work = root / ".session" / ("cli-controls-" + uuid.uuid4().hex)
+    work.mkdir(parents=True)
+    path = work / "orbi.db"
+    orbi.initialize(path)
+    checks = []
+
+    def rejects(action):
+        try:
+            action()
+        except RuntimeError as error:
+            return str(error)
+        raise AssertionError("Expected an explicit RuntimeError")
+
+    def passed(name):
+        checks.append(name)
+        print("PASS:", name, flush=True)
+
+    child = """from pathlib import Path
+import sys
+import orbi
+try:
+    with orbi.activity(Path(sys.argv[1]), restoring=sys.argv[2] == '1'):
+        pass
+except RuntimeError:
+    raise SystemExit(23)
+"""
+
+    def attempt(restoring):
+        return subprocess.run([sys.executable, "-B", "-c", child, str(path), str(int(restoring))],
+            cwd=root, text=True, capture_output=True, timeout=10)
+
+    with orbi.activity(path):
+        result = attempt(False)
+        assert result.returncode == 0, result
+        result = attempt(True)
+        assert result.returncode == 23, result
+    with orbi.activity(path, restoring=True):
+        for restoring in (False, True):
+            result = attempt(restoring)
+            assert result.returncode == 23, result
+    result = attempt(True)
+    assert result.returncode == 0, result
+    passed("cross-process turns share admission; restore excludes both turns and restores")
+
+    order, task = [], Mock()
+
+    def admit(*args):
+        order.append("admitted")
+        return task
+
+    def history(*args):
+        order.append("history")
+        return []
+
+    with patch.object(orbi, "Task", side_effect=admit), \
+            patch.object(orbi, "history", side_effect=history), \
+            patch.object(orbi, "ensure_runtime", side_effect=RuntimeError("control stop")), \
+            patch.object(orbi, "json_request") as http:
+        error = rejects(lambda: orbi.run_turn({"paths": {"db_path": path}},
+                        None, "control-session", str(work), "control prompt"))
+        assert error == "control stop" and order == ["admitted", "history"], (error, order)
+        task.finish.assert_called_once_with("error")
+        http.assert_not_called()
+    passed("continuation reads history after admission and finalizes a failed turn")
+
+    state_dir = work / ".session"
+    state_dir.mkdir()
+    model = work / "model.gguf"
+    config = {"paths": {"code_dir": work}, "lanes": {"a": {"model": model}},
+              "memory": {"embedding_model": work / "embedding.gguf"},
+              "runtime": {"port": 8125, "embedding_port": 8124, "server": work / "llama-server"}}
+    record = dict(pid=12345, started="control-start", model=str(model), port=8123)
+    process = subprocess.CompletedProcess([], 0,
+        stdout=f"/control/llama-server -m {model} --port 8123", stderr="")
+    with patch.object(orbi, "process_start", return_value="control-start"), \
+            patch.object(orbi.subprocess, "run", return_value=process), \
+            patch.object(orbi.subprocess, "Popen") as launch, \
+            patch.object(orbi, "json_request") as http:
+        assert orbi.owns_server(record)
+        assert not orbi.owns_server(dict(record, port=8125))
+        for stored in (record, {k: v for k, v in record.items() if k != "port"}):
+            orbi.atomic_json(state_dir / "services.json", {"lane_a": stored})
+            assert "--stop" in rejects(lambda: orbi.ensure_runtime(config))
+        http.assert_not_called()
+        launch.assert_not_called()
+    passed("changed or legacy ports are rejected before HTTP; live port must match ownership")
+
+    config["paths"]["db_path"] = path
+    config["memory"].update(max_items=12, max_chars=4000, max_ms=300)
+    with orbi.activity(path), patch.object(orbi, "settings", return_value=config), \
+            patch.object(sys, "argv", ["orbi", "--restore", str(work / "unused.sqlite3")]), \
+            patch.object(orbi.Memory, "restore") as restore, redirect_stderr(io.StringIO()) as errors:
+        assert orbi.main() == 1
+        assert "Database is active" in errors.getvalue()
+        restore.assert_not_called()
+
+    assert "Session no longer exists" in rejects(lambda: orbi.Task(path, "removed-session"))
+    with orbi.database(path) as db:
+        db.execute("INSERT INTO orbi_sessions VALUES(?,?,?)", ("missing-rows", str(work), time.time()))
+    task = orbi.Task(path, "missing-rows")
+    try:
+        payload = {"role": "assistant", "content": "buffered"}
+        message_id = task.message(payload)
+        with orbi.database(path) as db:
+            db.execute("DELETE FROM orbi_messages WHERE id=?", (message_id,))
+        rejects(lambda: task.message(payload, message_id))
+        task.finished.set()
+        task.watcher.join(timeout=2)
+        with orbi.database(path) as db:
+            db.execute("DELETE FROM orbi_tasks WHERE id=?", (task.id,))
+        rejects(lambda: task.set("thinking"))
+        task.state = "done"  # Exercise the outcome UPDATE independently of the state UPDATE.
+        rejects(lambda: task.finish("done"))
+    finally:
+        task.finished.set()
+        task.watcher.join(timeout=2)
+    passed("missing session, message, task-state and task-outcome rows fail visibly")
+    return checks
 
 
 def main():
@@ -147,6 +272,8 @@ def main():
             return True
 
     stdout, stderr = TTY(), TTY()
+    with orbi.database(database) as db:
+        db.execute("INSERT INTO orbi_sessions VALUES(?,?,?)", ("orb-self-check", str(project), time.time()))
     with redirect_stdout(stdout), redirect_stderr(stderr):
         task = orbi.Task(database, "orb-self-check")
         try:
@@ -174,6 +301,7 @@ def main():
     else:
         raise AssertionError("Corrupt artifact accepted")
     passed("artifact corruption is rejected", True)
+    checks.extend(control_checks())
     result = dict(passed=True, checks=checks, database=str(database))
     target = root / ".session/cli-results.json"
     target.write_text(json.dumps(result, indent=2) + "\n")
@@ -181,4 +309,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    control_checks() if sys.argv[1:] == ["--control-checks"] else main()

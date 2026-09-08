@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import signal
 import socket
 import sqlite3
@@ -103,7 +104,9 @@ def owns_server(record):
         return False
     result = subprocess.run(["ps", "-p", str(record["pid"]), "-o", "command="],
                             text=True, capture_output=True)
-    return result.returncode == 0 and "llama-server" in result.stdout and record["model"] in result.stdout
+    port = re.search(r"(?:^|\s)--port\s+(\d+)(?=\s|$)", result.stdout)
+    return (result.returncode == 0 and "llama-server" in result.stdout and record["model"] in result.stdout
+            and ("port" not in record or (port is not None and int(port[1]) == record["port"])))
 
 
 def ensure_runtime(config, stop=False):
@@ -128,16 +131,16 @@ def ensure_runtime(config, stop=False):
         try:
             for name, embedding, model in (("lane_a", False, config["lanes"]["a"]["model"]),
                     ("embedding", True, config["memory"]["embedding_model"])):
+                port = config["runtime"]["embedding_port" if embedding else "port"]
                 if owns_server(state.get(name)):
-                    if state[name]["model"] != str(model):
-                        raise RuntimeError("Model changed; run orbi --stop before restarting")
+                    if state[name]["model"] != str(model) or state[name].get("port") != port:
+                        raise RuntimeError("Model or port changed; run orbi --stop before restarting")
                     if json_request(url(config, embedding) + "/health", timeout=2).get("status") != "ok":
                         raise RuntimeError(f"{name} is not healthy")
                     continue
                 binary = config["runtime"]["server"]
                 if not binary.is_file() or not model.is_file():
                     raise FileNotFoundError("Local artifacts missing; run .venv/bin/python setup_orbi.py")
-                port = config["runtime"]["embedding_port" if embedding else "port"]
                 with socket.socket() as probe:
                     if probe.connect_ex(("127.0.0.1", port)) == 0:
                         raise RuntimeError(f"Port {port} is occupied by a server Orbi does not own")
@@ -159,7 +162,7 @@ def ensure_runtime(config, stop=False):
                     process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log,
                         stderr=subprocess.STDOUT, env=environment, start_new_session=True)
                 created.append(process)
-                state[name] = dict(pid=process.pid, started=process_start(process.pid), model=str(model))
+                state[name] = dict(pid=process.pid, started=process_start(process.pid), model=str(model), port=port)
                 atomic_json(state_file, state)
                 deadline = time.monotonic() + 120
                 while True:
@@ -183,6 +186,21 @@ def ensure_runtime(config, stop=False):
                         process.kill()
                         process.wait()
             raise
+
+
+@contextmanager
+def activity(path, restoring=False):
+    # Shared across sessions; restore alone owns this database for its whole operation.
+    with path.with_name(path.name + "-activity.lock").open("a") as lock:
+        mode = fcntl.LOCK_EX if restoring else fcntl.LOCK_SH
+        try:
+            fcntl.flock(lock, mode | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise RuntimeError("Database is active; restore requires all turns to finish") from error
+        try:
+            yield
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
 
 
 @contextmanager
@@ -225,6 +243,8 @@ class Task:
         self.lock = threading.RLock()
         with database(path) as db:
             db.execute("BEGIN IMMEDIATE")
+            if not db.execute("SELECT 1 FROM orbi_sessions WHERE id=?", (session,)).fetchone():
+                raise RuntimeError("Session no longer exists; start a new session after restoring")
             if db.execute("SELECT 1 FROM orbi_tasks WHERE session=? AND outcome IS NULL", (session,)).fetchone():
                 raise RuntimeError("This session is active in another process")
             db.execute("INSERT INTO orbi_tasks VALUES(?,?,?,NULL,?,?,?,?)",
@@ -244,7 +264,9 @@ class Task:
             self.last_activity = time.monotonic()
             if self.state != state:
                 with database(self.path) as db:
-                    db.execute("UPDATE orbi_tasks SET state=?,updated=? WHERE id=?", (state, time.time(), self.id))
+                    if db.execute("UPDATE orbi_tasks SET state=?,updated=? WHERE id=?",
+                                  (state, time.time(), self.id)).rowcount != 1:
+                        raise RuntimeError("Task disappeared while saving its state")
                 self.state = state
                 self.render()
 
@@ -263,7 +285,9 @@ class Task:
             if message_id is None:
                 return db.execute("INSERT INTO orbi_messages(session,task,payload) VALUES(?,?,?)",
                                   (self.session, self.id, serialized)).lastrowid
-            db.execute("UPDATE orbi_messages SET payload=? WHERE id=? AND task=?", (serialized, message_id, self.id))
+            if db.execute("UPDATE orbi_messages SET payload=? WHERE id=? AND task=?",
+                          (serialized, message_id, self.id)).rowcount != 1:
+                raise RuntimeError("Message disappeared while saving its contents")
         return message_id
 
     def finish(self, outcome):
@@ -271,7 +295,9 @@ class Task:
         self.watcher.join(timeout=2)
         self.set("done" if outcome == "done" else "error")
         with database(self.path) as db:
-            db.execute("UPDATE orbi_tasks SET outcome=?,updated=? WHERE id=?", (outcome, time.time(), self.id))
+            if db.execute("UPDATE orbi_tasks SET outcome=?,updated=? WHERE id=?",
+                          (outcome, time.time(), self.id)).rowcount != 1:
+                raise RuntimeError("Task disappeared while saving its outcome")
         if self.tty:
             print(file=sys.stderr)
 
@@ -375,10 +401,13 @@ def stream_reply(config, messages, task):
 
 
 def run_turn(config, memory, session, project, prompt):
-    previous = history(config["paths"]["db_path"], session)
+    with activity(config["paths"]["db_path"]):
+        return _run_turn(config, memory, session, project, prompt)
+
+
+def _run_turn(config, memory, session, project, prompt):
     task = Task(config["paths"]["db_path"], session)
     current = [{"role": "user", "content": prompt}]
-    task.message(current[0])
     outcome, answer = "error", []
     system = (
         f"You are Orbi, a local assistant. Current project: {project}. Answer directly. "
@@ -390,6 +419,8 @@ def run_turn(config, memory, session, project, prompt):
         "commands or edit files: Phase 1 provides memory tools only."
     )
     try:
+        previous = history(config["paths"]["db_path"], session)
+        task.message(current[0])
         task.set("waiting")
         ensure_runtime(config)
         recalled = memory.retrieve(prompt, project=project)
@@ -492,7 +523,8 @@ def main():
             print(memory.backup(config["paths"]["backup_dir"]))
             return 0
         if args.restore:
-            memory.restore(args.restore)
+            with activity(path, restoring=True):
+                memory.restore(args.restore)
             print("Memory restored and verified.")
             return 0
         prompt = " ".join(args.prompt)
