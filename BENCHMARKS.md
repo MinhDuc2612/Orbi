@@ -268,3 +268,37 @@ SHA-256 `878be93f9c238ea853b3fd1eb602637ce3cf1cddea56dc345d9a7bf2d6093e29`.
 The 2.31 GB reduction addresses model footprint directly; neither quality nor speed is
 assumed to carry over. Download verification and all four measurements are pending.
 This run returns all layers to GPU with mmap, Q8 KV, flash attention and 4,096 context.
+
+
+IQ3_S transfer completed using a verified 2,844,942,336-byte prefix plus four HTTP ranges;
+range transfer/assembly took **322.62 seconds**. Each range and the complete **11,289,671,136
+bytes** matched; the assembled SHA-256 matched before loading. A subsequent metadata
+round-trip assertion failed because tuples become JSON lists. The artifact was independently
+full-hashed again; the assertion and publish-after-verification ordering were fixed. No bad
+weight file was loaded, and temporary parts were removed only after verification.
+
+IQ3_S throughput **29.4857 tok/s**; routing **20/20**, valid tool JSON **20/20**, exact intended
+arguments **18/20**. The smaller quantization's quality was measured independently with the
+unchanged frozen fixture. Its ten-minute RAM run is in progress; early normal pressure does
+not replace the full-duration gate.
+
+
+IQ3_S's first RAM gate **failed** after **602.41 seconds**: 89 normal and 31 warning
+samples; warning began at **449.45 seconds**, minimum free memory **20%**, process
+high-water/sample-peak RSS **13,589,856,256 bytes**. Global GPU in-use peak was
+**12,111,396,864 bytes**. No request failed, but the pressure requirement did.
+
+### Prompt-cache root cause and retest (2026-09-08)
+
+The load log revealed an **8,192 MiB server prompt-cache limit**. By the end of this run
+it held **126 prompts / 3,588.711 MiB**, even though HTTP requests used `cache_prompt=false`.
+That request setting controls prompt reuse and does not disable the server cache. This
+explains an increasing host allocation while the GPU model allocation stayed steady.
+The recorded failures remain valid for those configurations; they do not prove the weights
+alone exceed RAM. Retesting IQ3_S with **`--cache-ram 0`**, all other model/fixture settings
+unchanged. No further weight download or gate relaxation.
+
+The runner also now sends shutdown SIGINT to the actual server child once. Sending it to
+both `/usr/bin/time` and its child caused the wrapper to forward a second interrupt and
+force termination, including a Metal `rsets` cleanup assertion. That was harness-induced
+shutdown behavior after the measurements, not a spontaneous inference failure.
