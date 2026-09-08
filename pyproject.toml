@@ -1,6 +1,16 @@
 [project]
 name = "orbi"
-version = "0.0.0"
-description = "Local-first terminal agent — Phase 0 foundation"
+version = "0.1.0"
+description = "Local terminal assistant with bounded project memory"
 requires-python = ">=3.12,<3.13"
-dependencies = ["mlx-lm==0.31.3"]
+dependencies = ["mlx-lm==0.31.3", "numpy==2.5.2"]
+
+[project.scripts]
+orbi = "orbi:main"
+
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["orbi", "memory"]
