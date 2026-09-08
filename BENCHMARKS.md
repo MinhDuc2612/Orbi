@@ -302,3 +302,25 @@ The runner also now sends shutdown SIGINT to the actual server child once. Sendi
 both `/usr/bin/time` and its child caused the wrapper to forward a second interrupt and
 force termination, including a Metal `rsets` cleanup assertion. That was harness-induced
 shutdown behavior after the measurements, not a spontaneous inference failure.
+
+
+## Lane A selected — 2026-09-08
+
+**Gemma 4 26B-A4B, Unsloth UD-IQ3_S, with the server prompt cache disabled** qualifies.
+
+| Gate | Measured result |
+| --- | --- |
+| Throughput | **29.3336 tok/s**, above15 and the19.48 baseline |
+| Routing | **20/20** |
+| Callable tool JSON | **20/20**; exact intended arguments **18/20** |
+| RAM | **601.43 seconds**, all **120 samples normal**, minimum free **34%** |
+
+Sampled peak RSS **11,943,804,928 bytes**; process high-water RSS **12,229,640,192 bytes**.
+Global GPU in-use peak **12,292,702,208 bytes**, including other applications. No request
+errors; server shut down normally with exit0. Evidence: `.session/gemma-iq3-nocache-*`.
+
+The winning flags are `-lm mmap -ngl99 --cache-ram0 -fa on -ctk q8_0 -ctv q8_0 -np1
+-c4096 -t8 -b128 -ub128 --jinja --reasoning off --offline --perf` (each option/value is
+passed as a separate argument). This certifies4,096 context, not32K. The default server
+prompt cache must remain disabled in Orbi. Neither the original Qwen baseline nor the
+failed candidates/configurations above were relabeled or erased.

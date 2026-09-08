@@ -1,14 +1,14 @@
-# Phase 0 skeleton. Relative paths are relative to this code directory.
+# Orbi Phase 1. Relative paths are relative to this code directory.
 [paths]
 code_dir = "."
 model_dir = "models"
 db_path = "orbi.db"
-backup_dir = "" # Choose a directory outside code/ before enabling Phase 1 backups.
+backup_dir = "../backups" # Phase 1 backups and markdown mirrors live outside code/.
 
-# Lane A selection is pending; installed benchmark weights stay in models/.
+# Lane A passed all four gates and the recorded baseline; see BENCHMARKS.md.
 [lanes.a]
 # Ranked: Qwen3.8-Flash-Next, Qwen3.8-27B + CMoE, Gemma 4 26B-A4B, Granite 4.1 8B.
-model = ""
+model = "models/gemma-4-26b-a4b/gemma-4-26B-A4B-it-UD-IQ3_S.gguf"
 
 [lanes.b]
 # Specialists: canary-qwen-2.5b, Qwen3-ASR-1.7B, Qwen3-TTS-12Hz-1.7B,
@@ -30,3 +30,12 @@ monthly = 0 # Local and free tiers only.
 max_items = 12
 max_chars = 4000
 max_ms = 300
+
+# Small semantic retrieval model; the 27B reranker path is not resident.
+embedding_model = "models/harrier/harrier-oss-v1-0.6B-Q4_K_M.gguf"
+
+[runtime]
+server = ".tools/llama-b10809/llama-b10809/llama-server"
+port = 8123
+embedding_port = 8124
+context_size = 4096
