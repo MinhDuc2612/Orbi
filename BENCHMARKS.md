@@ -251,3 +251,20 @@ transformer blocks. Throughput **23.3135 tok/s** beats the baseline. Early press
 normal with **31% free memory**, but the mapped GPU buffer still reports 12,952.19 MiB;
 no reduced physical residency or causal improvement is inferred from the flag alone.
 Quality and a full ten-minute memory run are pending. Evidence uses `.session/gemma-layers4-*`.
+
+
+Whole-layer retest completed: **20/20 routing**, **20/20 valid tool JSON**, **19/20 exact
+arguments**. RAM **failed** after **604.72 seconds**: 94 normal-pressure samples and
+26 warning-pressure samples, minimum free memory **19%**. Sampled peak RSS
+**13,520,551,936 bytes**, process high-water RSS **13,520,896,000 bytes**. Global GPU
+in-use peak **14,355,349,504 bytes** includes other applications. The early normal-pressure
+snapshot did not predict the full-duration result; no winner was selected.
+
+### Smaller Gemma quantization (2026-09-08)
+
+Next test uses the same candidate, publisher and pinned revision with **UD-IQ3_S**:
+`gemma-4-26B-A4B-it-UD-IQ3_S.gguf`, **11,289,671,136 bytes**,
+SHA-256 `878be93f9c238ea853b3fd1eb602637ce3cf1cddea56dc345d9a7bf2d6093e29`.
+The 2.31 GB reduction addresses model footprint directly; neither quality nor speed is
+assumed to carry over. Download verification and all four measurements are pending.
+This run returns all layers to GPU with mmap, Q8 KV, flash attention and 4,096 context.
