@@ -324,3 +324,43 @@ The winning flags are `-lm mmap -ngl99 --cache-ram0 -fa on -ctk q8_0 -ctv q8_0 -
 passed as a separate argument). This certifies4,096 context, not32K. The default server
 prompt cache must remain disabled in Orbi. Neither the original Qwen baseline nor the
 failed candidates/configurations above were relabeled or erased.
+
+## Phase 1 integration validation — 2026-09-09
+
+Real Harrier embeddings plus the selected Lane A scored **19/20 recall pairs**
+(required:17). All20 queries used semantic retrieval alongside BM25. Worst measured
+retrieval wall time was **124.349 ms**; maximum returned context was **12 items /
+1,798 characters**. Every query stayed within12 items/4,000 rendered characters/300ms,
+and no other-project fact leaked. These are model measurements, separate from the
+synthetic-vector unit checks of cap enforcement, stalled IO and scope filtering.
+
+The20 fictional facts/questions, accepted aliases and strict normalized-equality
+scoring were frozen before any model request. Fixture SHA-256:
+`888ef490698581f985dc8e2486b321d32bc1bc5bc231dc93614c7a309889090d`.
+**Failure retained:** recall-18 asked who owns the go-live checklist. The relevant
+release-coordinator fact was not retrieved; the model answered `UNKNOWN` instead of
+`Imani Tran`. Neither the question nor its aliases were changed after the run.
+Reproduce with `test_recall.py`; raw results remain locally in `.session/recall-results.json`.
+
+Delete-then-restore of the isolated test database preserved all30 records (20 facts,
+10 foreign-project distractors) and their exact1,024-dimensional vectors; the markdown
+mirror was verified. Production snapshots and mirrors live outside code at `../backups`.
+The03:00 launchd job was registered and manually triggered: **last exit code0**, snapshot
+integrity verified. Registration covers the current login; run `orbi --schedule-backups`
+after logging in again. Retention is14 days within this database's snapshot namespace.
+
+`test_cli.py` passed all18 checks (14 integration checks and four control groups), including streaming,
+continuation, real global remember/recall across projects, project-session isolation,
+pipes, PTY input with clean piped output, oversized-context rejection, Ctrl-C exit130,
+SIGKILL recovery, all seven persisted orb states, stall detection and corrupt-artifact
+rejection. Local HTTP ignores environment proxies. Test data stayed isolated from the
+production database. The control checks cover shared turn/exclusive restore admission
+across processes, continuation ordering, bound-port ownership before HTTP, and missing
+persistence rows. A direct CLI restore call also fails before mutation while a turn holds
+admission. Evidence: `.session/cli-results.json`.
+
+Final `./check.sh` exited **0** with all five lines: Python **3.12.13**, MLX
+**`Device(gpu, 0)`**, **`iogpu.wired_limit_mb: 0`**, **127.31 GB free** on the data volume,
+and the unchanged recorded19.48tok/s baseline. The current wired-limit reading differs
+from the earlier20,480 setting; no sysctl write or sudo was performed during this check.
+All2,158 protected planning/research snapshot entries matched their recorded hashes.
