@@ -364,3 +364,84 @@ Final `./check.sh` exited **0** with all five lines: Python **3.12.13**, MLX
 and the unchanged recorded19.48tok/s baseline. The current wired-limit reading differs
 from the earlier20,480 setting; no sysctl write or sudo was performed during this check.
 All2,158 protected planning/research snapshot entries matched their recorded hashes.
+
+## Lane A re-test preflight — 2026-09-09
+
+**The requested DWQ comparison has not run.** The user confirmed the manual sysctl
+change, and a read-only check returned `iogpu.wired_limit_mb: 20480` before any model
+measurement. No model was downloaded, deleted, loaded or benchmarked during this preflight.
+Phase2 has not started, and the existing Gemma weights/config remain available.
+
+The exact frozen `bench_cases.json` SHA-256 is
+`fdcf669576169038916ba421e097ba9fee3854aae01873c5b6e6f25287e3e86d`.
+Prompts, schemas, expected answers and scoring are unchanged. The new ranking is
+**exact argument accuracy first, throughput second**, with greater than15tok/s sufficient;
+beating19.48tok/s is no longer an acceptance requirement. All model results below are
+unmeasured under the requested DWQ/32K protocol, not zero scores.
+
+| candidate | quant | tok/s | routing | callable JSON | exact args | peak RAM |
+| --- | --- | --- | --- | --- | --- | --- |
+| Granite 4.1 8B | DWQ4-bit requested; no matching published checkpoint found | N/A | N/A | N/A | N/A | N/A |
+| Qwen3.8-27B + CMoE | DWQ4-bit requested; CMoE unsupported here | N/A | N/A | N/A | N/A | N/A |
+| Gemma 4 26B-A4B | Published MLX4-bit DWQ; not loaded | N/A | N/A | N/A | N/A | N/A |
+
+### Protocol conflict requiring a decision
+
+The protected plan itself labels DWQ **MLX only**, then prescribes llama.cpp load flags.
+The discovered Gemma DWQ artifact is
+[`catalystsec/gemma-4-26B-A4B-it-4bit-DWQ`](https://huggingface.co/catalystsec/gemma-4-26B-A4B-it-4bit-DWQ/tree/c50241db43deef70c71a4bd0e1f32ff9229aeec0),
+revision `c50241db43deef70c71a4bd0e1f32ff9229aeec0`: three MLX Safetensors shards,
+affine4-bit/group64 config, and no GGUF artifact. Its card names DWQ but does not publish
+a calibration recipe or training log, so the name alone is not independent verification
+of its build history. Searches for Granite4.1-8B found standard MLX and GGUF quants,
+but no matching DWQ checkpoint. Search metadata/cards were saved under
+`.session/retest-20260909/`; only metadata was fetched.
+
+[Apple's DWQ documentation](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/LEARNED_QUANTS.md)
+describes learned scales/biases with a teacher and MLX output. Installed mlx-lm0.31.3's
+DWQ implementation saves that MLX format; its converter has no GGUF export option.
+The installed llama.cppb10809 expects GGUF. No supported route was found that preserves
+these learned weights in the requested llama.cpp execution path. Re-quantizing them to
+a regular GGUF cannot simply be labeled the same DWQ build, and DWQ does not guarantee
+6-bit-equivalent quality on every model. No incompatible flags or substitute quantization
+were silently used. A user decision is pending: MLX DWQ with corresponding MLX settings,
+or llama.cpp with explicitly documented GGUF quantizations.
+
+### Qwen + CMoE: skipped as unsupported, not a throughput failure
+
+Rechecked official CMoE HEAD `42dfc94777a0de3620a67bdb5000d7fec56e5b6a`.
+[`run_cmoe.py`](https://github.com/JarvisPei/CMoE/blob/42dfc94777a0de3620a67bdb5000d7fec56e5b6a/run_cmoe.py#L17)
+hardcodes `torch.device('cuda:0')`, calls `.cuda()`, and dispatches only Llama/Llava.
+This Mac is Darwin arm64 with no NVIDIA CUDA device; the project environment also has
+no Torch installed. Installing Torch alone would not supply CUDA or Qwen support.
+
+The [official Qwen config](https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/config.json)
+uses `Qwen3_5ForConditionalGeneration` with48 linear-attention and16 full-attention layers.
+CMoE assumes `layer.self_attn` throughout. Its [two-projection router](https://github.com/JarvisPei/CMoE/blob/42dfc94777a0de3620a67bdb5000d7fec56e5b6a/CMoE_model.py#L31)
+and ungated shared experts also differ from the installed
+[Qwen35MoE graph](https://github.com/ggml-org/llama.cpp/blob/5266f24da75dc449bd56cbed7addb9c8e4a6a73e/src/models/qwen35moe.cpp#L493).
+The official source tree has no Qwen/Metal/MPS/GGUF export implementation; no matching
+Qwen3.8-27B-CMoE checkpoint was found. An unrelated Llama8B CMoE GGUF exists, but provides
+no verified route for this candidate. llama.cpp's `-cmoe` means CPU placement of existing
+MoE weights; it does not perform this conversion. This is a source/runtime compatibility
+finding, not a fabricated execution error: conversion/inference were not attempted,
+and the unconverted dense model was not substituted.
+
+### Health and backup fixes completed
+
+`check.sh` now exits1 and prints the exact manual sysctl command when the wired limit is0.
+It also checks the loaded launchd job against the expected program, arguments, config,
+working directory and03:00 calendar schedule; missing/mismatched registration exits1.
+The first implementation incorrectly expected unquoted launchctl calendar keys and
+reported `WARNING: Nightly backup registration is missing or mismatched.` despite an
+existing job. Inspection showed quoted `"Hour"`/`"Minute"` keys; matching was corrected
+and the real check now exits0, with the registered03:00 job verified.
+
+`test_check.py` passed reset-to-zero, missing-registration, wrong-hour and wrong-program
+checks, including optimized Python. These tests mocked read-only command results;
+they did not change sysctl or launchd. The real check reports Python3.12.13,
+`Device(gpu, 0)`, wired limit20480,127.11GB free, and the unchanged recorded baseline.
+README documents the exact post-login command:
+`/Users/minhduc/Orbi/code/.venv/bin/orbi --schedule-backups`.
+The current-login scheduling approach is retained, as the user explicitly allowed
+documented re-registration; no file was written outside code, including CLAUDE.md.
