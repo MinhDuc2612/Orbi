@@ -40,6 +40,16 @@ after all active turns finish; it refuses to overwrite an active turn.
 `orbi --schedule-backups` registers a 03:00 macOS job for the current login;
 run it again after logging in. Its plist stays inside `.session/`.
 
+After login, register backups with this exact command on this machine:
+
+```sh
+/Users/minhduc/Orbi/code/.venv/bin/orbi --schedule-backups
+```
+
+`./check.sh` verifies the loaded 03:00 backup job against its plist and reports
+this command. It exits non-zero if registration is missing or mismatched, or
+if `iogpu.wired_limit_mb` is 0; it prints the manual sysctl command in that case.
+
 Run `.venv/bin/python test_memory.py` for deterministic memory checks.
 `test_cli.py` and `test_recall.py` use the installed models and isolated test data;
 start the local services with one `orbi` prompt before running the recall test.
