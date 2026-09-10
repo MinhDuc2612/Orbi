@@ -445,3 +445,102 @@ README documents the exact post-login command:
 `/Users/minhduc/Orbi/code/.venv/bin/orbi --schedule-backups`.
 The current-login scheduling approach is retained, as the user explicitly allowed
 documented re-registration; no file was written outside code, including CLAUDE.md.
+
+### MLX comparison authorized — 2026-09-10
+
+The user approved replacing the llama.cpp-specific flags with MLX settings while
+retaining32K context,8-bit KV and ten-minute monitoring. Wired limit20480 was verified
+again. CMoE remains skipped for the recorded compatibility reasons.
+
+Granite's DWQ recipe is fixed before any new benchmark answer: official BF16 teacher
+`ibm-granite/granite-4.1-8b` revision `1504002f650e656a0a3789d99574df12e3e94ed0`,
+MLX affine4-bit/group64 student,128 calibration examples plus32 validation examples,
+257 tokens maximum, batch1, seed123, one DWQ pass, learning rate1e-6. Calibration comes
+from eight evenly spaced20-row pages of `allenai/tulu-3-sft-mixture`, shuffled once
+and saved before model use. No `bench_cases.json` input or answer is used for calibration.
+Teacher targets are computed in a separate process to avoid keeping the BF16 teacher
+resident alongside the student. Artifact sizes and complete hashes are verified before use.
+This is a small local DWQ build, not a claim of a publisher-certified optimized quant.
+
+Installed mlx-lm0.31.3's default Gemma cache raises
+`NotImplementedError("RotatingKVCache Quantization NYI")` for8-bit KV. The comparison
+will use full quantized caches while preserving Gemma's explicit1024-token sliding
+attention masks, with a hard prompt-plus-reply limit of32768 and fresh caches per request.
+This retains more KV history than a rotating cache. Also, MLX8-bit KV uses quantized
+matrix multiplication/softmax attention, **not Flash Attention**; no FA claim carries over
+from the llama.cpp runs. These backend differences and actual observed cache/attention
+types will be recorded, rather than hidden behind flag names.
+
+### Granite artifact preparation — 2026-09-10
+
+All four official BF16 shards and accompanying metadata passed full pinned hash
+verification (`models/granite-4.1-bf16/orbi-artifact.json`). The initial sequential
+transfer was operator-interrupted to resume the same partial files with four parallel
+transfers; curl exited with `CalledProcessError: died with <Signals.SIGINT: 2>`.
+The resumed transfer completed successfully; this was not a model execution failure.
+Frozen independent calibration SHA256:
+`d063e2be1c39f5aec1e5d4f451b664be4f7c4a1634255df61186f37db377ccb1`.
+
+The first teacher-target attempt failed before inference:
+`ValueError: Received 1 parameters not in model: lm_head.weight.`
+The official checkpoint declares tied embeddings but includes a duplicate head tensor;
+installed MLX Granite has no sanitizer for it. Preparation now verifies exact tensor
+and dtype equality with the embedding before removing only that duplicate from the
+loader input. Other weights still undergo strict loading; original source files are
+unchanged. Tiny duplicate/mismatch checks passed. Original failure log is retained at
+`.session/retest-20260909/granite-targets.log`; retry log is `granite-targets-2.log`.
+
+The MLX harness now uses the requested strict >15 tok/s gate; beating19.48 remains a
+reported comparison only. All-mode continues through quality and ten-minute monitoring
+even after a speed miss. Frozen fixture hash is checked before model loading. MLX uses
+its installed default argmax sampler, fresh8-bit caches,256MiB allocator cache,
+20GiB allocation limit and18GiB process wired limit for both candidates. These process
+limits do not modify sysctl. Synthetic KV, timing, context and tool-parser checks pass.
+
+During the BF16 teacher's initial load, a read-only spot check observed pressure4,
+13% free and6,141.69MiB swap used; a later check showed pressure1,16% free and8,011.19MiB
+swap used. Targets then progressed normally. These preparation observations are not
+candidate inference RAM-gate measurements. Subsequent samples are retained in
+`granite-targets-memory.jsonl`.
+
+Inspection also confirmed `stream_generate` temporarily changes the MLX process wired
+limit to the device's recommended working set and restores18GiB afterward. The harness
+records both values rather than claiming18GiB remains active during generation. Sysctl
+remains20480. This installed-library behavior is identical for both candidates.
+
+Teacher generation completed with exit0 and all128 train/32 validation target files
+verified. Continuous post-load monitoring recorded pressure1 throughout; transient
+load pressure was separately recorded above. DWQ training started with initial held-out
+KL loss0.079. This is calibration evidence, not a routing/tool score.
+
+The new MLX harness is committed as `7e6db03`; its runnable synthetic checks and existing
+benchmark evaluator checks pass. It keeps all frozen prompts/scoring intact and runs no
+real tools. Granite's tokenizer selects the installed native JSON tool-frame parser;
+Gemma uses its native function-call parser. Neither backend enforces a JSON grammar,
+whereas historical llama.cpp routing runs did, so those historical scores are not a
+same-backend quantization-only comparison.
+
+Gemma's three direct shard transfers were operator-interrupted after slow progress,
+then resumed from their preserved prefixes using the already-proven Phase1 HTTP-range
+method, with18 independent ranges. Range offsets, final shard sizes and complete SHA256
+must pass before use. Only the code-local retest transfer script is run; old transfer
+scripts that write root CLAUDE.md are not executed. Original interruption evidence is
+retained in `gemma-dwq-download.log`; range evidence is in `gemma-range-download.log`.
+
+To avoid idle time during Gemma's transfer, Granite's deterministic accuracy-only run
+will use `benchmark_mlx.py quality` after its DWQ build is verified. This run may overlap
+network transfer; its timing is not used for the throughput or RAM gate. Dedicated speed
+and600-second soak runs wait until downloads finish. All runs use the same frozen
+messages, argmax, local weights and8-bit KV settings; no answers will be used to revise
+the calibration recipe or prompts. The mode-specific result files retain this separation.
+
+### Granite DWQ build verified
+
+Preparation exited0. Held-out KL loss improved from0.079 to0.071 (printed precision),
+and439 quantization scale/bias arrays changed. The final affine4-bit/group64 student is
+4,714,642,545 bytes, SHA256
+`827f8ef77845348b6dc04dfe6d54c56bf4f84c5b4fd1baec8632badc14a8cdd6`.
+Build provenance is `models/granite-4.1-dwq-4bit/orbi-dwq-build.json`; complete output is
+`.session/retest-20260909/granite-dwq-build.log`. These demonstrate an executed DWQ pass,
+not merely a renamed ordinary4-bit checkpoint. This calibration result does not imply
+a particular tool score or6-bit-equivalent quality.
