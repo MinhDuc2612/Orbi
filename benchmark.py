@@ -45,8 +45,8 @@ def chat(url, messages, **options):
     return result
 
 
-def speed(url):
-    response = chat(url, [{"role": "user", "content": PROMPT}], max_tokens=128)
+def speed(url, *, chat_fn=None):
+    response = (chat_fn or chat)(url, [{"role": "user", "content": PROMPT}], max_tokens=128)
     timing = response["timings"]
     if timing["predicted_n"] < 32:
         raise ValueError("Fewer than 32 generated tokens; insufficient speed sample")
@@ -80,7 +80,8 @@ def matches(value, schema):
     return True
 
 
-def quality(url):
+def quality(url, *, chat_fn=None):
+    complete = chat_fn or chat
     cases = json.loads(Path(__file__).with_name("bench_cases.json").read_text())
     system = "\n".join(cases["routing_policy"]) + "\n" + json.dumps(cases["skill_taxonomy"])
     route_format = {"type": "json_schema", "json_schema": {"name": "route", "strict": True,
@@ -92,7 +93,7 @@ def quality(url):
     for case in cases["routing"]:
         row = dict(id=case["id"], correct=False)
         try:
-            row["response"] = chat(url, [{"role": "system", "content": system},
+            row["response"] = complete(url, [{"role": "system", "content": system},
                                          {"role": "user", "content": case["prompt"]}],
                                    response_format=route_format)
             message = row["response"]["choices"][0]["message"]
@@ -106,7 +107,7 @@ def quality(url):
     for case in cases["tool_calls"]:
         row = dict(id=case["id"], valid=False, correct=False)
         try:
-            row["response"] = chat(url, [
+            row["response"] = complete(url, [
                 {"role": "system", "content": cases["tool_policy"]},
                 {"role": "user", "content": case["prompt"]}],
                 tools=cases["tools"], tool_choice="auto", parallel_tool_calls=False)
@@ -152,7 +153,7 @@ def sample_memory(pid, started):
     )
 
 
-def soak(url, pid, duration):
+def soak(url, pid, duration, *, chat_fn=None):
     if duration < 600:
         raise ValueError("RAM gate requires at least 600 seconds")
     started = time.monotonic()
@@ -176,7 +177,7 @@ def soak(url, pid, duration):
     worker.start()
     try:
         while not done.is_set():
-            response = chat(url, [{"role": "user", "content": PROMPT +
+            response = (chat_fn or chat)(url, [{"role": "user", "content": PROMPT +
                                    f" Include practical example {len(rates) + 1}."}],
                             max_tokens=128)
             rates.append(response["timings"]["predicted_per_second"])
