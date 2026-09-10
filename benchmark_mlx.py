@@ -2,13 +2,15 @@
 
 8-bit KV uses MLX quantized attention, not Flash Attention. Gemma sliding
 attention retains its explicit window mask while storing the full quantized
-history because mlx-lm 0.31.3 cannot quantize RotatingKVCache. No JSON grammar,
-answer repair, prompt-cache reuse, weight download, or tool execution is used.
+history because mlx-lm 0.31.3 cannot quantize RotatingKVCache. Routing honors its
+finite JSON schema during decoding. No answer repair, tool-argument constraints,
+prompt-cache reuse, weight download, or tool execution is used.
 """
 
 import argparse
 import hashlib
 import importlib.metadata
+import itertools
 import json
 import math
 import os
@@ -42,6 +44,47 @@ def save(path, value):
     temporary.replace(path)
     if path.read_text() != encoded:
         raise OSError(f"Result verification failed: {path}")
+
+
+def route_constraint(tokenizer, response_format):
+    """A finite schema needs only a token trie, with no answer-key information."""
+    import mlx.core as mx
+
+    schema = response_format["json_schema"]["schema"]
+    properties = schema["properties"]
+    if (response_format.get("type") != "json_schema" or schema.get("type") != "object"
+            or schema.get("additionalProperties") is not False
+            or set(schema["required"]) != set(properties) or len(properties) != 2
+            or any(p.get("type") != "string" or not p.get("enum")
+                   or any(type(v) is not str for v in p["enum"]) for p in properties.values())):
+        raise ValueError("Only the benchmark's finite string-enum object schema is supported")
+    root = {}
+    for order in itertools.permutations(properties):
+        for values in itertools.product(*(properties[key]["enum"] for key in order)):
+            obj = dict(zip(order, values))
+            for formatting in ({}, {"separators": (",", ":")}, {"indent": 2}):
+                node = root
+                for token in tokenizer.encode(json.dumps(obj, **formatting), add_special_tokens=False):
+                    node = node.setdefault(token, {})
+                for eos in tokenizer.eos_token_ids:
+                    node[eos] = node  # The generator may compute one lookahead after EOS.
+    prefix_length = None
+
+    def constrain(tokens, logits):
+        nonlocal prefix_length
+        if prefix_length is None:
+            prefix_length = tokens.size
+        node = root
+        for token in tokens[prefix_length:].tolist():
+            if token not in node:
+                raise ValueError("Generated tokens left the routing schema trie")
+            node = node[token]
+        allowed = mx.array(list(node), dtype=mx.int32)
+        masked = mx.full_like(logits, -float("inf"))
+        masked[:, allowed] = logits[:, allowed]
+        return masked
+
+    return constrain
 
 
 def quantized_cache(model):
@@ -122,6 +165,8 @@ class MLXChat:
         quantized_cache(self.model)  # Reject incompatible caches before any generation.
         self.metadata = dict(
             model_path=str(path), model_type=config["model_type"],
+            harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            scoring_sha256=hashlib.sha256(Path(b.__file__).read_bytes()).hexdigest(),
             config_sha256=hashlib.sha256((path / "config.json").read_bytes()).hexdigest(),
             quantization=quant, device=str(mx.default_device()), load_s=self.load_s,
             mlx=importlib.metadata.version("mlx"), mlx_lm=importlib.metadata.version("mlx-lm"),
@@ -132,7 +177,9 @@ class MLXChat:
             wired_limit_note="mlx-lm stream_generate temporarily applies the device recommendation and restores the prior limit",
             cache_strategy="fresh full QuantizedKVCache per request; native window masks retained",
             attention_path="quantized_matmul + softmax + quantized_matmul; no Flash Attention",
-            response_format_enforced=False, parallel_tool_calls_enforced=False,
+            response_format_enforced=True, parallel_tool_calls_enforced=False,
+            routing_constraint="finite schema token trie; both key orders, compact/default/indented JSON; all enum combinations allowed",
+            tool_arguments_constrained=False,
             timing_policy="post-first-yield tokens / observed elapsed including final GPU drain; native TPS also retained",
             tool_parser=(self.tokenizer.tool_parser.__module__ if self.tokenizer.tool_parser else None),
             thinking_enabled=False, temperature=0, seed=42,
@@ -152,6 +199,8 @@ class MLXChat:
             raise ValueError(f"Unsupported generation options: {sorted(unknown)}")
         max_tokens = options.get("max_tokens", 256)
         tools = options.get("tools")
+        response_format = options.get("response_format")
+        processors = [route_constraint(self.tokenizer, response_format)] if response_format else None
         prompt = self.tokenizer.apply_chat_template(
             messages, tools=tools, add_generation_prompt=True, tokenize=True,
             enable_thinking=False,
@@ -165,6 +214,7 @@ class MLXChat:
         generator = stream_generate(
             self.model, self.tokenizer, prompt, max_tokens=max_tokens,
             prompt_cache=caches, prefill_step_size=128,
+            logits_processors=processors,
             # Caches are quantized before prefill; no rotating-cache conversion.
             kv_bits=8, kv_group_size=64, quantized_kv_start=0,
         )
@@ -209,7 +259,7 @@ class MLXChat:
                             kv_cache_types=[type(c).__name__ for c in caches],
                             tool_parse_error=parse_error),
                 request=dict(messages=messages, options=options, prompt_tokens=len(prompt),
-                             response_format_enforced=False,
+                             response_format_enforced=bool(response_format),
                              parallel_tool_calls_enforced=False),
             )
         except Exception as error:
@@ -304,12 +354,29 @@ def self_check():
     with patch.object(mlx_lm, "stream_generate", side_effect=synthetic_generate), \
             patch.object(QuantizedKVCache, "nbytes", new=property(lambda _: 0)), \
             patch.object(time, "perf_counter", side_effect=[0, 1, 1.1, 1.2]):
-        response = adapter("", [], response_format={"type": "json_schema"})
+        response = adapter("", [])
     assert response["choices"][0]["message"]["content"] == '```json\n{}\n```'
     assert response["timings"]["predicted_n"] == 2
     assert math.isclose(response["timings"]["predicted_per_second"], 20)
     assert not response["request"]["response_format_enforced"]
-    print("PASS: synthetic 8-bit KV, Gemma prefill/decode window masks, native tool frames; no model score.")
+    # Exercise schema constraints with characters as tokens, including every
+    # independent enum combination; the constraint never sees expected routes.
+    schema = {"type": "json_schema", "json_schema": {"schema": {
+        "type": "object", "properties": {
+            "skill": {"type": "string", "enum": ["edit", "search"]},
+            "lane": {"type": "string", "enum": ["A", "B", "C"]}},
+        "required": ["skill", "lane"], "additionalProperties": False}}}
+    character_tokenizer = SimpleNamespace(encode=lambda text, **_: list(text.encode()), eos_token_ids={0})
+    for skill, lane in itertools.product(["edit", "search"], ["A", "B", "C"]):
+        constrain = route_constraint(character_tokenizer, schema)
+        prefix = [255]
+        sequence = list(json.dumps(dict(skill=skill, lane=lane)).encode()) + [0, 0]
+        for token in sequence:
+            logits = constrain(mx.array(prefix), mx.zeros((1, 256)))
+            assert mx.isfinite(logits[0, token]).item()
+            assert not mx.isfinite(logits[0, ord("`")]).item()
+            prefix.append(token)
+    print("PASS: synthetic KV, Gemma masks, native frames, routing schema, context and timing; no model score.")
 
 
 def main():

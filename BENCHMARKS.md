@@ -544,3 +544,98 @@ Build provenance is `models/granite-4.1-dwq-4bit/orbi-dwq-build.json`; complete 
 `.session/retest-20260909/granite-dwq-build.log`. These demonstrate an executed DWQ pass,
 not merely a renamed ordinary4-bit checkpoint. This calibration result does not imply
 a particular tool score or6-bit-equivalent quality.
+
+### Granite DWQ accuracy result — measured, failed
+
+The accuracy-only process exited1: **routing0/20, callable JSON20/20, exact arguments14/20**.
+All20 routing responses failed strict JSON parsing; 1 began with Markdown fences,
+and others answered the task instead of returning a route. The first exact error was
+`JSONDecodeError('Expecting value: line 1 column 1 (char 0)')`. A tokenizer-only check
+confirmed the complete frozen system policy is present in the rendered prompt; it was
+not dropped by the template. No response cleanup or grammar was added after this result.
+
+Wrong exact-argument cases: `t03`, `t04`, `t06`, `t07`, `t12`, `t16` (quoted paths/text,
+regex and Unicode). This does not meet the requested improvement over Gemma's18/20.
+Raw responses and error strings are retained in
+`.session/retest-20260909/granite-dwq-quality-run-quality.json`; aggregate run metadata is
+`granite-dwq-quality-run.json`. File SHA256:
+`082a3a7eecd0c62dc11003907cf03b406598dd734a51cc9f1d8f94ef7d6af10e`.
+Peak process RSS during this accuracy run was5,008,474,112 bytes;
+MLX peak allocation was5,057,154,938 bytes. These are not yet a ten-minute
+RAM gate. Dedicated speed and soak measurements remain pending transfer completion.
+
+### Gemma DWQ download verified
+
+All18 HTTP ranges, three assembled shards and the complete artifact manifest passed
+verification; both assembly and final verification exited0. Published revision:
+`c50241db43deef70c71a4bd0e1f32ff9229aeec0`. Weight files total
+14,194,825,720 bytes.
+Final hashes:
+
+- `model-00001-of-00003.safetensors`: `9d6aec37b137f30823970aca155341480cdb3ef7d2b6e4995f7a04940d4c1985`
+- `model-00002-of-00003.safetensors`: `b6a4170d64ee67b6f0e612fb998956ef5792576c4118a374cc9052aadedeca09`
+- `model-00003-of-00003.safetensors`: `77e7d7aeaf518512a4f50c5e96a85b234dfee8d6410de88d685baead93e13ab8`
+
+Original IQ3_S Gemma weights remain intact. All downloads and hashing have finished;
+dedicated throughput and ten-minute RAM measurements now run without that I/O.
+
+Granite's dedicated speed run exited0: **19.48594417 tok/s**, passing the strict
+>15 gate. It used127 post-first-yield tokens over
+6.517518 seconds, including final GPU drain.
+Raw timing: `.session/retest-20260909/granite-dwq-speed-run.json`.
+The dedicated600-second RAM run has started.
+
+### Granite DWQ RAM gate complete
+
+Dedicated soak exited0: 607.468838 seconds total, with120 samples
+covering602.844070 seconds. All pressure readings were1 (normal),
+minimum free memory was66%, and the monitor/generation error list
+was empty. Peak sampled GPU in-use memory was5,303,894,016 bytes.
+True process RSS peak across speed, accuracy and soak was5,008,474,112 bytes
+(5.008GB). MLX allocator peaks are retained separately in each result file.
+Raw soak: `.session/retest-20260909/granite-dwq-soak-run.json`.
+
+Granite passes speed and RAM, but fails routing and reaches only14/20 exact arguments;
+it is not a replacement for the existing Gemma Lane A. Gemma's full DWQ run has started
+with the same harness/settings and no simultaneous model run or download.
+
+### Gemma DWQ initial measurements and routing-control correction
+
+Gemma's dedicated speed gate in the full run measured **39.24433842
+tok/s**. Unconstrained accuracy was **5/20 routing,20/20 callable JSON,
+18/20 exact arguments**. Wrong exact cases:
+t07, t12.
+The immediate post-load sample showed pressure2 (warning),33% free; subsequent spot
+checks showed pressure1. The full600-second soak is still running, so its RAM outcome
+is not yet claimed. Original result: `gemma-dwq-all-run.json` and its per-mode files.
+
+**Protocol correction:** the first MLX adapter knowingly lacked response-format
+support, but `benchmark.py` requests a strict JSON schema for routing. Dropping that
+option makes the routing control differ from the historical llama.cpp test, despite
+unchanged messages. The unconstrained results above remain real observations, but
+should not be treated as an equal-control routing comparison. This is a harness
+limitation, not evidence that quantization alone caused the routing-score drop.
+
+The corrected adapter enforces only the routing schema while decoding: a finite token
+trie permits every independent skill/lane enum combination, both key orders, and
+compact/default/indented JSON. It reads no expected route or tool answer. This finite
+serialization subset is documented; it is not a complete general JSON grammar.
+There is no post-generation cleanup and no constraint on tool-call arguments. Both
+candidates will rerun the same40 accuracy requests with this control. Speed and soak
+requests have no response_format, so their execution path is unchanged. The current
+Gemma soak continues in the already-running original process; GPU self-checks and
+corrected accuracy runs wait until it exits.
+
+### Gemma DWQ RAM gate complete
+
+The original full run exited1 because its unconstrained routing score was5/20; its RAM
+component passed. Soak lasted603.055555 seconds, with120 samples
+covering602.343687 seconds. All sampled pressure levels were1,
+minimum free memory was23%, and there were no monitor/generation
+errors. This does not erase the earlier immediate post-load pressure2 warning.
+
+Peak RSS was7,916,339,200 bytes, while MLX peak allocation was
+14,423,719,360 bytes. Metal allocations are not fully represented by process RSS;
+these metrics overlap and must not be added. The final comparison reports MLX peak
+allocation explicitly, with RSS and system pressure retained here. Peak sampled GPU
+in-use memory during soak was14,786,101,248 bytes.
