@@ -588,7 +588,7 @@ The dedicated600-second RAM run has started.
 ### Granite DWQ RAM gate complete
 
 Dedicated soak exited0: 607.468838 seconds total, with120 samples
-covering602.844070 seconds. All pressure readings were1 (normal),
+and the last sample at602.844070 seconds. All pressure readings were1 (normal),
 minimum free memory was66%, and the monitor/generation error list
 was empty. Peak sampled GPU in-use memory was5,303,894,016 bytes.
 True process RSS peak across speed, accuracy and soak was5,008,474,112 bytes
@@ -630,7 +630,7 @@ corrected accuracy runs wait until it exits.
 
 The original full run exited1 because its unconstrained routing score was5/20; its RAM
 component passed. Soak lasted603.055555 seconds, with120 samples
-covering602.343687 seconds. All sampled pressure levels were1,
+and the last sample at602.343687 seconds. All sampled pressure levels were1,
 minimum free memory was23%, and there were no monitor/generation
 errors. This does not erase the earlier immediate post-load pressure2 warning.
 
@@ -639,3 +639,88 @@ Peak RSS was7,916,339,200 bytes, while MLX peak allocation was
 these metrics overlap and must not be added. The final comparison reports MLX peak
 allocation explicitly, with RSS and system pressure retained here. Peak sampled GPU
 in-use memory during soak was14,786,101,248 bytes.
+
+### Corrected Granite accuracy result
+
+Schema-controlled accuracy exited0: **routing19/20, callable JSON20/20, exact14/20**.
+Routing miss `r20` chose `algorithmic_coding`/`C`; the frozen expected skill differs.
+All20 tool response choices are exactly identical to the unconstrained run, verified
+by direct comparison. The control restores routing format; it does not repair arguments.
+Every routing request records `response_format_enforced=true`.
+Raw file: `.session/retest-20260909/granite-dwq-schema-quality-run.json`.
+The schema adapter and synthetic checks are committed as `cc81339`.
+
+## Final Lane A DWQ retest — 2026-09-10
+
+The final routing scores use the restored finite JSON-schema control. Both models
+reran all20 routing and20 tool-call cases; all tool response choices were identical
+to their respective unconstrained runs. Original failed runs remain recorded above.
+
+| candidate | quant | tok/s | routing | callable JSON | exact args | peak RAM |
+| --- | --- | --- | --- | --- | --- | --- |
+| Gemma 4 26B-A4B | 4-bit DWQ (published MLX) | 39.24 | 20/20 | 20/20 | 18/20 | 14.42 GB MLX |
+| Granite 4.1 8B | 4-bit DWQ (local MLX) | 19.49 | 19/20 | 20/20 | 14/20 | 5.06 GB MLX |
+| Qwen3.8-27B + CMoE | Not built: Metal unsupported | N/A | N/A | N/A | N/A | N/A |
+
+**Recommendation:** Gemma DWQ is the best of these measured candidates by exact-argument
+accuracy, then speed, but Lane A remains provisional. DWQ did not fix either existing
+`t07`/`t12` error: both Gemma quants score18/20, while Granite scores14/20. No20/20-exact
+replacement was found. The existing CLI remains on its Phase1 IQ3_S checkpoint; Phase2
+was not started, and no model was promoted or deleted.
+
+Both models pass the measured throughput, schema-controlled routing/callable-JSON,
+and ten-minute steady-workload pressure gates. Gemma nevertheless produced pressure2
+warnings immediately after **both** model loads; its subsequent ten-minute samples
+were all normal. Those startup warnings are not erased by the steady-state pass.
+The published Gemma artifact's DWQ training provenance remains publisher-claimed;
+its immutable revision, file hashes and4-bit config were independently verified.
+
+RAM in the comparison table means peak **MLX allocation**, not total process/system
+memory. Peak RSS is recorded separately: Granite5.009GB, Gemma7.916GB. These figures
+overlap and are not additive. The32K setting is an admission limit with dynamic KV:
+maximum observed prompt-plus-response lengths were Granite1,063 and Gemma857 tokens.
+A filled32K session was not stress-tested, so the table does not certify its RAM use.
+Both models use8-bit KV quantized attention, not Flash Attention; the runtime exception
+and exact cache behavior are recorded above.
+
+Final evidence: `.session/retest-20260909/final-comparison.json`,
+`granite-dwq-schema-quality-run.json`, `gemma-dwq-schema-quality-run.json`, plus the
+separate speed/soak files already named. Both final accuracy processes exited0.
+The shared corrected harness SHA256 is
+`53bf03cc100da01dfa10c2363f2c04d030d37b13ab30af68772a2b8003110c29`.
+
+Validation on 2026-09-10: synthetic routing-schema/KV/mask/context/timing tests, benchmark evaluator,
+health-check regressions, and DWQ tied-head checks all pass. `./check.sh` exits0:
+Python3.12.13, `Device(gpu, 0)`, wired limit20480,76.68GB free, unchanged recorded
+19.48tok/s baseline, and verified03:00 backup registration with the documented
+post-login command. The four protected root documents and `bench_cases.json` retain
+their original hashes. No models, calibration data, research files or runtime logs are
+tracked in Git; original Gemma IQ3_S weights are preserved.
+
+### Handoff verification — 2026-09-12
+
+Resumed from the completed comparison above; no model was loaded and no measurement
+was repeated. An independent review confirmed the table against the raw accuracy,
+speed and soak records, including memory and runtime caveats.
+The frozen cases and corrected harness retain their recorded SHA256
+hashes. Synthetic benchmark, routing-schema/KV/mask/context/timing, health-check and
+DWQ tied-head checks pass again. Original Gemma IQ3_S weights remain present at
+11,289,671,136 bytes, and the CLI still selects that checkpoint.
+
+The current health check exits **1** because `iogpu.wired_limit_mb` has reset to **0**.
+This is the intended failure behavior, not a new benchmark result. No sudo command
+was run; before any further measurement the user must run and confirm:
+
+```sh
+sudo sysctl iogpu.wired_limit_mb=20480
+```
+
+The backup job was also absent after login. Re-registration with
+`/Users/minhduc/Orbi/code/.venv/bin/orbi --schedule-backups` succeeded, and `./check.sh`
+independently verifies the loaded 03:00 job. The wired limit is the only remaining
+health-check failure; Python is 3.12.13 and MLX reports `Device(gpu, 0)`.
+
+Three protected root documents (`CLAUDE.md`, `Orbiplan.md`, `Orbichecklist.md`) already
+differed from the September 9 snapshot when this session resumed. No root document
+was edited here; the session records its work in this code-local report as required
+by the retest's write boundary.
