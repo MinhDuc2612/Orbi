@@ -70,6 +70,17 @@ def main():
         finish="tool_calls") for c in cases["tool_calls"]]
     result = run_http(routing + calls, lambda: b.quality("http://unused"))
     assert result["passed"] and result["routing_score"] == result["tool_validity"] == result["tool_exact"] == 20
+    # Schema-valid punctuation mistakes must still fail exact-argument scoring.
+    wrong = deepcopy(calls)
+    for case_id, field, suffix in (("t07", "query", "."), ("t12", "text", "")):
+        index = next(i for i, case in enumerate(cases["tool_calls"]) if case["id"] == case_id)
+        function = wrong[index]["choices"][0]["message"]["tool_calls"][0]["function"]
+        args = json.loads(function["arguments"])
+        args[field] = args[field] + suffix if suffix else args[field].removesuffix(".")
+        assert b.matches(args, schemas[function["name"]])
+        function["arguments"] = json.dumps(args)
+    result = run_http(routing + wrong, lambda: b.quality("http://unused"))
+    assert result["tool_validity"] == 20 and result["tool_exact"] == 18
     bad = deepcopy(calls)
     emitted = [r["choices"][0]["message"]["tool_calls"][0] for r in bad]
     emitted[0]["function"]["arguments"] = "{"

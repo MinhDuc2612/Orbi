@@ -724,3 +724,63 @@ Three protected root documents (`CLAUDE.md`, `Orbiplan.md`, `Orbichecklist.md`) 
 differed from the September 9 snapshot when this session resumed. No root document
 was edited here; the session records its work in this code-local report as required
 by the retest's write boundary.
+
+### Cleanup audit and grammar correction — 2026-09-12
+
+Read all958 lines of the updated root `CLAUDE.md` and the three companion planning
+files. The new50-item future list is planning, not implemented features. The cleanup
+did not remove a required Orbi dependency: Python3.12.13, `pip check`, the MLX GPU
+import, the installed CLI entry point and llama.cpp b10809 all pass. No model was
+loaded, downloaded, deleted or promoted during this audit.
+
+The restored Flash-Next checkpoint is intact: all3 shards match their original
+SHA256 hashes and total93,682,584,224 bytes. Full size/hash checks also pass for the
+retained Gemma IQ3_S checkpoint, Harrier, the runtime archive, all10 files in the
+Gemma DWQ manifest and the local Granite DWQ weight file. Evidence is in
+`.session/retest-20260909/cleanup-audit-20260912.json`. The frozen benchmark cases
+remain unchanged. User edits to the root documents were preserved and their hashes
+stayed unchanged throughout this audit.
+
+**Correction to the new grammar diagnosis:** Gemma's two exact-argument failures
+are punctuation changes already present in the raw model output, not escaping
+corruption introduced by a parser:
+
+| case | field | expected decoded value | actual decoded value |
+| --- | --- | --- | --- |
+| t07 | query | `^def [a-z_]+\(` | `^def [a-z_]+\(.` |
+| t12 | text | `The demo title is "Orbi 🌐".` | `The demo title is "Orbi 🌐"` |
+
+Both values satisfy their unchanged tool schemas, which allow arbitrary strings.
+Replaying all40 saved Gemma/Granite native tool frames through the current parsers
+reproduces the recorded choices exactly; quote, backslash, newline and Unicode
+round-trips also pass. Granite has six semantic mismatches, not one identical
+failure shared with Gemma. The historical Gemma IQ3_S run has the same two
+punctuation differences as its DWQ run.
+
+[Upstream GBNF documentation](https://github.com/ggml-org/llama.cpp/blob/master/grammars/README.md)
+describes constraints on output syntax and conversion of supported JSON schemas.
+Our concrete counterexample above shows why a grammar derived from these schemas
+cannot guarantee exact intended string values: it permits both the right and wrong
+strings. Constraints may change generation and remain a useful experiment, but
+**18/20 →20/20 is unmeasured, not a promised fix**. No grammar experiment or repaired
+answer was substituted into the existing comparison. Added an evaluator regression
+that keeps callable validity20/20 while scoring these punctuation errors18/20.
+README and the config comment now make the provisional status explicit.
+
+Current health differs from the earlier handoff: `./check.sh` exits0 with
+`Device(gpu, 0)`, `iogpu.wired_limit_mb=20480`,133.97GB free at the first audit check,
+and verified03:00 backup registration. No sudo or sysctl write was run here.
+The live database and all5 existing nightly snapshots pass read-only integrity
+checks; each snapshot has its markdown mirror. Deterministic memory tests pass,
+including all three caps, scope isolation and delete/restore; CLI concurrency
+controls, wired-limit/backup regressions and benchmark evaluator checks pass.
+The preserved real recall result remains19/20 with its canonical fixture hash
+verified, and the saved18-check real CLI result is intact. These historical model
+scores were not re-measured after cleanup.
+
+Two audit-command errors were resolved without changing data: a direct byte hash of
+the pretty-printed recall fixture raised `AssertionError`; the original test hashes
+canonical JSON (`sort_keys=True, ensure_ascii=False`), and that comparison passes.
+The independent replay first raised `ImportError: cannot import name 'granite' from
+'mlx_lm.tool_parsers'`; using the saved metadata's actual `json_tools` parser made
+all replays pass. Neither error is a failed model gate or evidence of data loss.

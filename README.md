@@ -8,6 +8,8 @@ The Lane A DWQ retest scored Gemma 18/20 and Granite 14/20 on exact tool argumen
 Gemma's two errors persist, so Lane A remains provisional and Phase 2 is on hold.
 The CLI continues to use the Phase 1 IQ3_S checkpoint; full retest measurements and
 startup memory warnings are recorded in [BENCHMARKS.md](BENCHMARKS.md).
+The two Gemma failures change punctuation inside valid string arguments. A tool-schema
+grammar can enforce structure; it does not guarantee the requested string is copied exactly.
 
 On this Mac, activate the existing environment and run:
 

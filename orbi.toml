@@ -5,7 +5,8 @@ model_dir = "models"
 db_path = "orbi.db"
 backup_dir = "../backups" # Phase 1 backups and markdown mirrors live outside code/.
 
-# Lane A passed all four gates and the recorded baseline; see BENCHMARKS.md.
+# Phase 1 runtime retained; Lane A is provisional after the DWQ exact-argument retest.
+# Four original gates passed, but exact arguments remain 18/20; see BENCHMARKS.md.
 [lanes.a]
 # Ranked: Qwen3.8-Flash-Next, Qwen3.8-27B + CMoE, Gemma 4 26B-A4B, Granite 4.1 8B.
 model = "models/gemma-4-26b-a4b/gemma-4-26B-A4B-it-UD-IQ3_S.gguf"
