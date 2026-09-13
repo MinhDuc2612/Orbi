@@ -25,7 +25,10 @@ from tool_validation import copy_issues, retry_feedback
 SYSTEM_RULES = '''When a tool argument must reproduce text from the request:
 - If the request says "exact", "exactly", "verbatim", or "literally", copy every character including any terminal punctuation.
 - Otherwise, a sentence-final period is punctuation of the request, not part of the value. Do not include it.
-- Never add characters that were not in the source. Never drop characters from a value the request marked exact.'''
+- Never add characters that were not in the source. Never drop characters from a value the request marked exact.
+
+When answering from retrieved memory, a memory that answers the question in different words is still an answer. Match on meaning, not wording — a "release coordinator" owns the release checklist; an "owner" is whoever the memory names in that role. Answer UNKNOWN only when nothing retrieved is relevant to the question. Do not answer UNKNOWN merely because the retrieved wording differs from the question's wording.
+A related topic without the requested fact is not an answer: keep UNKNOWN when that fact is absent. Do not invent missing facts, names, dates or numbers.'''
 
 
 def system_messages(messages):

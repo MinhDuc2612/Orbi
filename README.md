@@ -2,18 +2,20 @@
 
 Orbi is a local terminal assistant with streaming replies, persistent sessions,
 and scoped memory. Phase 1 uses Gemma 4 26B-A4B UD-IQ3_S with Harrier embeddings.
-Lane A measured 29.3336 tok/s; recall scored 19/20. See [BENCHMARKS.md](BENCHMARKS.md).
+Lane A measured 29.3336 tok/s; recall now scores 20/20. See [BENCHMARKS.md](BENCHMARKS.md).
 
 The Lane A DWQ retest scored Gemma 18/20 and Granite 14/20 on exact tool arguments.
-Gemma's two errors persist, so Lane A remains provisional and Phase 2 is on hold.
+Gemma's two first-pass errors persist, so Lane A remains provisional and Phase 2 is on hold.
 The CLI continues to use the Phase 1 IQ3_S checkpoint; full retest measurements and
 startup memory warnings are recorded in [BENCHMARKS.md](BENCHMARKS.md).
 The two Gemma failures change punctuation inside valid string arguments. A tool-schema
 grammar can enforce structure; it does not guarantee the requested string is copied exactly.
-The 2026-09-13 fixes preserve the top three semantic hits and verify greedy decoding.
-Recall remains 19/20: Imani's fact is retrieved, but the model answers `UNKNOWN`.
-Exact arguments remain 18/20 first-pass and 18/20 after one retry per failed call.
-Both incorrect calls are rejected; the retry and regex checks do not improve accuracy.
+The shared system prompt distinguishes exact text from request punctuation and
+matches retrieved facts by meaning. The 2026-09-13 run scores recall 20/20;
+all 20 separate checks with the answering fact removed correctly return `UNKNOWN`.
+Exact arguments score 18/20 first-pass and 19/20 after one retry per failed call.
+The fact's missing period is corrected on retry; the incorrect regex is still rejected.
+The top three semantic hits remain protected and greedy decoding is verified.
 
 On this Mac, activate the existing environment and run:
 

@@ -908,3 +908,57 @@ pass; worst retrieval34.40ms. Separate diagnostics remove each answering fact
 from its retrieved context: all20 return `UNKNOWN`. These diagnostics do not add
 passes to the frozen recall score. Evidence: `.session/prompt-rules-20260913/punctuation/`.
 Both fixture hashes and the entire `test_recall.py` file match their before hashes.
+
+### Meaning-based memory rule — final frozen-suite results
+
+The shared product policy now recognizes answers expressed in different words,
+including responsibility implied by a named role. It explicitly preserves UNKNOWN
+when a related topic does not supply the requested fact. No retrieval, fixture,
+scoring, sampling, retry-count or cap changes accompanied this second rule.
+
+| Product prompt | Frozen recall | Exact first-pass | Exact post-retry | Retries | Separate abstention |
+| --- | --- | --- | --- | --- | --- |
+| Punctuation rule | 19/20 | 18/20 | 18/20 | 2 | 20/20 |
+| Punctuation + meaning-based memory rule | 20/20 | 18/20 | 19/20 | 2 | 20/20 |
+
+Both full20-case suites were rerun after each policy change, plus the20 routing
+cases. Final recall has no failures: `recall-18` now returns `Imani Tran`, and all19
+previously passing cases remain correct. Each separate abstention diagnostic
+removes the answering fact and retains the other retrieved blocks; all20 still
+return UNKNOWN. Those results are not counted as additional recall successes.
+The 12-item/4000-character/300-ms caps remain unchanged; observed maxima are12
+items,1798 rendered characters and34.57ms. Scope and delete/restore checks pass.
+
+Final tools still score routing20/20 and callable JSON20/20. First-pass failures
+remain `t07` (adds a period to the regex) and `t12` (drops the exact fact's period).
+Each receives only one retry. With both prompt rules present, `t12` copies the
+full fact correctly on retry; **t07 still fails**. Its emitted `^def [a-z_]+\(.`
+compiles but fails the intended positive targets `def hello(` and `def _name(`.
+The source-copy and regex checks reject it on both attempts. Exact post-retry and
+accepted calls are19/20; benchmark exit1. No argument was automatically rewritten
+or credited to the first pass. The remaining failure is measured noncompliance
+with the punctuation rule, despite that rule being supplied in the system prompt.
+Lane A remains provisional and Phase2 remains on hold.
+
+As in the preceding run, recall uses the product IQ3_S runtime with Harrier;
+tool accuracy uses Gemma DWQ via MLX. These are accuracy measurements, not fresh
+speed or ten-minute memory-pressure qualification runs. All18 real CLI checks
+pass with the final product prompt, including actual remember/recall calls,
+streaming, continuation, pipes, cancellation, context overflow and crash controls.
+Focused prompt/context, evaluator and MLX adapter checks passed; `pip check`
+passes. `./check.sh` exits0: Python3.12.13, `Device(gpu, 0)`, wired limit20480,
+131.48GB free and verified03:00 backup registration.
+
+Before/after canonical recall SHA256:
+`888ef490698581f985dc8e2486b321d32bc1bc5bc231dc93614c7a309889090d`.
+Before/after tool fixture SHA256:
+`fdcf669576169038916ba421e097ba9fee3854aae01873c5b6e6f25287e3e86d`.
+The entire `test_recall.py` file is also byte-for-byte unchanged. The audit checks
+all saved first-pass user prompts and tool schemas against the frozen cases,
+and verifies that only the shared product policy was appended to system text.
+HTTP recall slots confirm temperature0/top_p1/temperature-only sampling; every
+MLX attempt records argmax/temp0/top_p1. Raw first/retry responses, policy text and
+hashes, separate abstention results and final integrity checks are preserved in
+`.session/prompt-rules-20260913/`; `final-audit.json` summarizes both stages.
+README reflects the final scores. The four root documents, memory implementation
+and cap configuration retain their before hashes; this session is logged here.
