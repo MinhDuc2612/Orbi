@@ -22,6 +22,22 @@ import uuid
 from memory import Memory
 from tool_validation import copy_issues, retry_feedback
 
+SYSTEM_RULES = '''When a tool argument must reproduce text from the request:
+- If the request says "exact", "exactly", "verbatim", or "literally", copy every character including any terminal punctuation.
+- Otherwise, a sentence-final period is punctuation of the request, not part of the value. Do not include it.
+- Never add characters that were not in the source. Never drop characters from a value the request marked exact.'''
+
+
+def system_messages(messages):
+    """Apply the product policy without modifying caller-owned prompts or history."""
+    messages = [dict(message) for message in messages]
+    if not messages or messages[0]["role"] != "system":
+        messages.insert(0, dict(role="system", content=SYSTEM_RULES))
+    elif not messages[0]["content"].endswith(SYSTEM_RULES):
+        messages[0]["content"] += "\n\n" + SYSTEM_RULES
+    return messages
+
+
 ROOT = Path(__file__).resolve().parent
 _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 ORBS = dict(idle="○", thinking="◐", tool="◓", waiting="◒", done="●", error="◉", stalled="◌")
@@ -325,6 +341,7 @@ def fit_messages(config, system, memory_text, previous, current):
     while True:
         messages = [{"role": "system", "content": system + "\n\n<memory>\n" + memory_text + "\n</memory>"}]
         messages += [message for turn in previous for message in turn] + current
+        messages = system_messages(messages)
         prompt = json_request(url(config) + "/apply-template", {
             "messages": messages, "tools": TOOLS, "add_generation_prompt": True})["prompt"]
         count = len(json_request(url(config) + "/tokenize", {"content": prompt, "add_special": False})["tokens"])

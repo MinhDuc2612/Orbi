@@ -203,6 +203,7 @@ class MLXChat:
         tools = options.get("tools")
         response_format = options.get("response_format")
         processors = [route_constraint(self.tokenizer, response_format)] if response_format else None
+        messages = b.system_messages(messages)
         template_messages = deepcopy(messages)
         for message in template_messages:
             for call in message.get("tool_calls", []):
@@ -378,9 +379,10 @@ def self_check():
             patch.object(time, "perf_counter", side_effect=[0, 1, 1.1, 1.2]):
         response = adapter("", history)
     assert isinstance(history[0]["tool_calls"][0]["function"]["arguments"], str)
-    assert seen["messages"][0]["tool_calls"][0]["function"]["arguments"] == {"text": "hello."}
-    assert seen["messages"][1]["tool_responses"] == [dict(name="remember", response="Copy rejected")]
-    assert seen["messages"][1]["content"] == ""
+    assert seen["messages"][0]["role"] == "system"
+    assert seen["messages"][1]["tool_calls"][0]["function"]["arguments"] == {"text": "hello."}
+    assert seen["messages"][2]["tool_responses"] == [dict(name="remember", response="Copy rejected")]
+    assert seen["messages"][2]["content"] == ""
     assert response["choices"][0]["message"]["content"] == '```json\n{}\n```'
     assert response["timings"]["predicted_n"] == 2
     assert math.isclose(response["timings"]["predicted_per_second"], 20)

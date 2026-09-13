@@ -890,3 +890,21 @@ Raw Stage3 responses, retry diffs and failures are under
 `stage3-recall.json` and the integrity audit is `final-validation.json` beside it.
 The four root planning/memory files match their pre-run hashes. This session is
 logged here, inside code/, respecting the explicit prohibition on editing them.
+
+## Shared product prompt rules — 2026-09-13
+
+The punctuation policy now applies to every Orbi generation, through a shared
+message helper used before CLI context counting and by both inference adapters.
+Frozen fixture system text remains intact as a prefix; the appended product policy
+is logged in actual requests. No fixture or scoring edits were made. The actual
+Gemma chat template was checked: the policy and original user prompt both survive
+rendering. Prompt/context/evaluator/MLX checks and independent read-only review pass.
+
+The punctuation-only full rerun scores recall19/20 (`recall-18`: `UNKNOWN`),
+routing20/20, callable JSON20/20, exact18/20 first-pass and18/20 post-retry. Both
+`t07` and`t12` repeat their punctuation errors on the sole retry; accepted18/20,
+benchmark exit1. The rule did not improve either error. Caps and restore checks
+pass; worst retrieval34.40ms. Separate diagnostics remove each answering fact
+from its retrieved context: all20 return `UNKNOWN`. These diagnostics do not add
+passes to the frozen recall score. Evidence: `.session/prompt-rules-20260913/punctuation/`.
+Both fixture hashes and the entire `test_recall.py` file match their before hashes.

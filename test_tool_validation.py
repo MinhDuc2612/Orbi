@@ -44,6 +44,19 @@ def cli_checks():
 
 
 def main():
+    import orbi
+
+    messages = [dict(role='system', content='Original instructions.'), dict(role='user', content='Keep me.')]
+    effective = orbi.system_messages(messages)
+    assert effective[0]['content'] == messages[0]['content'] + '\n\n' + orbi.SYSTEM_RULES
+    assert messages[0]['content'] == 'Original instructions.' and effective[1] == messages[1]
+    assert orbi.system_messages(effective) == effective
+    assert orbi.system_messages(messages[1:])[0] == dict(role='system', content=orbi.SYSTEM_RULES)
+    with patch.object(orbi, 'json_request', side_effect=[dict(prompt='rendered'), dict(tokens=[1, 2])]) as request:
+        fitted = orbi.fit_messages(orbi.settings(), 'Original instructions.', 'Memory.', [], messages[1:])
+    counted = request.call_args_list[0].args[1]['messages']
+    assert counted == fitted and counted[0]['content'].endswith(orbi.SYSTEM_RULES)
+
     source = 'Exact "quotes", a backslash \\, tiếng Việt 🌐.\nSecond line. '
     prompt = 'Remember this exact fact globally: ' + source
     assert verbatim_sources(prompt, 'remember') == {'text': source}

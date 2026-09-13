@@ -11,6 +11,7 @@ import threading
 import time
 import urllib.request
 
+from orbi import system_messages
 
 PROMPT = (
     "Explain how a local command-line assistant can keep useful project memory "
@@ -25,7 +26,7 @@ def strict_json(text):
 
 
 def chat(url, messages, **options):
-    body = dict(messages=messages, temperature=0, top_p=1, samplers=["temperature"], seed=42, max_tokens=256,
+    body = dict(messages=system_messages(messages), temperature=0, top_p=1, samplers=["temperature"], seed=42, max_tokens=256,
                 cache_prompt=False, stream=False)
     body.update(options)
     request = urllib.request.Request(
@@ -42,6 +43,7 @@ def chat(url, messages, **options):
         value = timing.get(key, 0)
         if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
             raise ValueError(f"Invalid generation timing: {timing}")
+    result["request"] = body
     return result
 
 
