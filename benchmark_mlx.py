@@ -8,6 +8,7 @@ prompt-cache reuse, weight download, or tool execution is used.
 """
 
 import argparse
+from copy import deepcopy
 import hashlib
 import importlib.metadata
 import itertools
@@ -202,8 +203,17 @@ class MLXChat:
         tools = options.get("tools")
         response_format = options.get("response_format")
         processors = [route_constraint(self.tokenizer, response_format)] if response_format else None
+        template_messages = deepcopy(messages)
+        for message in template_messages:
+            for call in message.get("tool_calls", []):
+                function = call["function"]
+                if isinstance(function["arguments"], str):
+                    function["arguments"] = b.strict_json(function["arguments"])
+            if message.get("role") == "tool" and self.model.model_type in ("gemma4", "gemma4_text"):
+                message["tool_responses"] = [dict(name=message["name"], response=message["content"])]
+                message["content"] = ""
         prompt = self.tokenizer.apply_chat_template(
-            messages, tools=tools, add_generation_prompt=True, tokenize=True,
+            template_messages, tools=tools, add_generation_prompt=True, tokenize=True,
             enable_thinking=False,
         )
         if type(max_tokens) is not int or max_tokens < 1 or len(prompt) + max_tokens > CONTEXT:
@@ -346,7 +356,15 @@ def self_check():
         else:
             raise AssertionError("Context cap accepted overflow")
         generate.assert_not_called()
-    adapter.tokenizer.apply_chat_template = lambda *a, **k: [1, 2]
+    seen = {}
+    def template(messages, **kwargs):
+        seen["messages"] = messages
+        return [1, 2]
+    adapter.tokenizer.apply_chat_template = template
+    adapter.model.model_type = "gemma4"
+    history = [dict(role="assistant", content="", tool_calls=[dict(function=dict(
+        name="remember", arguments='{"text":"hello."}'))]),
+        dict(role="tool", name="remember", content="Copy rejected", tool_call_id="call_0")]
     def synthetic_generate(*args, **kwargs):
         assert all(c.bits == 8 for c in kwargs["prompt_cache"])
         assert kwargs["sampler"](mx.array([[1., 3., 2.]])).item() == 1
@@ -358,7 +376,11 @@ def self_check():
     with patch.object(mlx_lm, "stream_generate", side_effect=synthetic_generate), \
             patch.object(QuantizedKVCache, "nbytes", new=property(lambda _: 0)), \
             patch.object(time, "perf_counter", side_effect=[0, 1, 1.1, 1.2]):
-        response = adapter("", [])
+        response = adapter("", history)
+    assert isinstance(history[0]["tool_calls"][0]["function"]["arguments"], str)
+    assert seen["messages"][0]["tool_calls"][0]["function"]["arguments"] == {"text": "hello."}
+    assert seen["messages"][1]["tool_responses"] == [dict(name="remember", response="Copy rejected")]
+    assert seen["messages"][1]["content"] == ""
     assert response["choices"][0]["message"]["content"] == '```json\n{}\n```'
     assert response["timings"]["predicted_n"] == 2
     assert math.isclose(response["timings"]["predicted_per_second"], 20)
@@ -390,7 +412,11 @@ def main():
     parser.add_argument("--output", type=Path)
     parser.add_argument("--duration", type=int, default=600)
     parser.add_argument("--self-check", action="store_true")
+    parser.add_argument("--retry-tools", action="store_true")
+    parser.add_argument("--validate-regex", action="store_true")
     args = parser.parse_args()
+    if args.validate_regex and not args.retry_tools:
+        parser.error("--validate-regex requires --retry-tools")
     if args.self_check:
         self_check()
         return 0
@@ -405,6 +431,7 @@ def main():
     if not output.parent.is_dir():
         parser.error("Output parent must already exist inside code/")
     result = dict(passed=False, qualified=False, mode=args.mode,
+                  retry_tools=args.retry_tools, validate_regex=args.validate_regex,
                   fixture_sha256=hashlib.sha256((ROOT / "bench_cases.json").read_bytes()).hexdigest(),
                   measured={}, started_at=time.strftime("%Y-%m-%dT%H:%M:%S%z"))
     save(output, result)  # A killed process leaves an explicitly incomplete run.
@@ -422,8 +449,13 @@ def main():
         result["runtime"] = runner.metadata
         result["initial_memory"] = b.sample_memory(os.getpid(), time.monotonic())
         for mode in modes:
-            measured = (b.soak("mlx-local", os.getpid(), args.duration, chat_fn=runner)
-                        if mode == "soak" else getattr(b, mode)("mlx-local", chat_fn=runner))
+            if mode == "soak":
+                measured = b.soak("mlx-local", os.getpid(), args.duration, chat_fn=runner)
+            elif mode == "quality":
+                measured = b.quality("mlx-local", chat_fn=runner, retry_tools=args.retry_tools,
+                                     validate_regex=args.validate_regex)
+            else:
+                measured = b.speed("mlx-local", chat_fn=runner)
             result["measured"][mode] = measured
             save(paths[mode], measured)
             save(output, result)
@@ -435,6 +467,9 @@ def main():
     except KeyboardInterrupt:
         result["error"] = "KeyboardInterrupt: operator cancelled; incomplete gates do not pass"
     finally:
+        result["fixture_sha256_after"] = hashlib.sha256((ROOT / "bench_cases.json").read_bytes()).hexdigest()
+        if result["fixture_sha256_after"] != FIXTURE_SHA256:
+            result.update(passed=False, qualified=False, error="Frozen benchmark fixtures changed during the run")
         result["process_peak_rss_bytes"] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         if runner is not None:
             import mlx.core as mx

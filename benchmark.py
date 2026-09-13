@@ -80,7 +80,24 @@ def matches(value, schema):
     return True
 
 
-def quality(url, *, chat_fn=None):
+def score_tool(response, schemas, expected):
+    emitted = response["choices"][0]["message"].get("tool_calls", [])
+    if (response["choices"][0]["finish_reason"] != "tool_calls"
+            or len(emitted) != 1 or emitted[0]["type"] != "function"
+            or not isinstance(emitted[0].get("id"), str) or not emitted[0]["id"]):
+        raise ValueError("Expected exactly one function call")
+    call = emitted[0]["function"]
+    args = strict_json(call["arguments"])
+    valid = call["name"] in schemas and matches(args, schemas[call["name"]])
+    if valid and "scope" in args:
+        valid = (args["project"] is None if args["scope"] == "global"
+                 else isinstance(args["project"], str) and bool(args["project"]))
+    return valid, valid and dict(name=call["name"], arguments=args) == expected
+
+
+def quality(url, *, chat_fn=None, retry_tools=False, validate_regex=False):
+    from tool_validation import retry_feedback, tool_issues
+
     complete = chat_fn or chat
     cases = json.loads(Path(__file__).with_name("bench_cases.json").read_text())
     system = "\n".join(cases["routing_policy"]) + "\n" + json.dumps(cases["skill_taxonomy"])
@@ -107,31 +124,56 @@ def quality(url, *, chat_fn=None):
     for case in cases["tool_calls"]:
         row = dict(id=case["id"], valid=False, correct=False)
         try:
-            row["response"] = complete(url, [
+            messages = [
                 {"role": "system", "content": cases["tool_policy"]},
-                {"role": "user", "content": case["prompt"]}],
-                tools=cases["tools"], tool_choice="auto", parallel_tool_calls=False)
-            emitted = row["response"]["choices"][0]["message"].get("tool_calls", [])
-            if (row["response"]["choices"][0]["finish_reason"] != "tool_calls"
-                    or len(emitted) != 1 or emitted[0]["type"] != "function"
-                    or not isinstance(emitted[0].get("id"), str) or not emitted[0]["id"]):
-                raise ValueError("Expected exactly one function call")
-            call = emitted[0]["function"]
-            args = strict_json(call["arguments"])
-            row["valid"] = call["name"] in schemas and matches(args, schemas[call["name"]])
-            if row["valid"] and "scope" in args:
-                row["valid"] = (args["project"] is None if args["scope"] == "global"
-                                else isinstance(args["project"], str) and bool(args["project"]))
-            row["correct"] = row["valid"] and dict(name=call["name"], arguments=args) == case["expected"]
+                {"role": "user", "content": case["prompt"]}]
+            options = dict(tools=cases["tools"], tool_choice="auto", parallel_tool_calls=False)
+            row["response"] = complete(url, messages, **options)
+            row["valid"], row["correct"] = score_tool(row["response"], schemas, case["expected"])
+            if retry_tools:
+                # Match examples annotate the regex task; no answer key enters retry feedback.
+                examples = ([('def hello(', True), ('def _name(', True), ('class Hello(', False),
+                             ('def 9bad(', False), ('DEF hello(', False)]
+                            if validate_regex and case["id"] == "t07" else None)
+                row.update(retry_count=0, post_retry_valid=row["valid"],
+                           post_retry_correct=row["correct"], accepted=False, regex_examples=examples)
+                final = row["response"]
+                if row["valid"]:
+                    emitted = final["choices"][0]["message"]["tool_calls"]
+                    function = emitted[0]["function"]
+                    issues = tool_issues(case["prompt"], function["name"],
+                                         strict_json(function["arguments"]), examples)
+                    row["first_pass_issues"] = issues
+                    if issues:
+                        feedback = {"role": "tool", "name": function["name"],
+                                    "tool_call_id": emitted[0]["id"], "content": retry_feedback(issues)}
+                        row["retry_count"], row["retry_feedback"] = 1, feedback
+                        row.update(post_retry_valid=False, post_retry_correct=False)
+                        retry_messages = messages + [dict(role="assistant", content="", tool_calls=emitted), feedback]
+                        row["retry_response"] = final = complete(url, retry_messages, **options)
+                        row["post_retry_valid"], row["post_retry_correct"] = score_tool(final, schemas, case["expected"])
+                        function = final["choices"][0]["message"]["tool_calls"][0]["function"]
+                        issues = tool_issues(case["prompt"], function["name"],
+                                             strict_json(function["arguments"]), examples)
+                    row["remaining_issues"] = issues
+                    row["accepted"] = row["post_retry_valid"] and not issues
         except Exception as error:
             row["error"] = repr(error)
         calls.append(row)
-        print(f"{row['id']}: callable={row['valid']}, exact={row['correct']}", flush=True)
+        print(f"{row['id']}: callable={row['valid']}, exact={row['correct']}"
+              + (f", retries={row.get('retry_count', 0)}, post_retry={row.get('post_retry_correct', False)}, accepted={row.get('accepted', False)}"
+                 if retry_tools else ""), flush=True)
     score = sum(r["correct"] for r in routing)
     valid = sum(r["valid"] for r in calls)
-    return dict(passed=score >= 18 and valid == 20, routing_score=score,
+    result = dict(passed=score >= 18 and valid == 20, routing_score=score,
                 tool_validity=valid, tool_exact=sum(r["correct"] for r in calls),
                 routing=routing, tool_calls=calls)
+    if retry_tools:
+        result.update(tool_post_retry_exact=sum(r.get("post_retry_correct", False) for r in calls),
+                      tool_retries=sum(r.get("retry_count", 0) for r in calls),
+                      tool_accepted=sum(r.get("accepted", False) for r in calls))
+        result["passed"] &= result["tool_post_retry_exact"] == result["tool_accepted"] == 20
+    return result
 
 
 def command(*args):

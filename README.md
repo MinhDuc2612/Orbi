@@ -10,6 +10,10 @@ The CLI continues to use the Phase 1 IQ3_S checkpoint; full retest measurements 
 startup memory warnings are recorded in [BENCHMARKS.md](BENCHMARKS.md).
 The two Gemma failures change punctuation inside valid string arguments. A tool-schema
 grammar can enforce structure; it does not guarantee the requested string is copied exactly.
+The 2026-09-13 fixes preserve the top three semantic hits and verify greedy decoding.
+Recall remains 19/20: Imani's fact is retrieved, but the model answers `UNKNOWN`.
+Exact arguments remain 18/20 first-pass and 18/20 after one retry per failed call.
+Both incorrect calls are rejected; the retry and regex checks do not improve accuracy.
 
 On this Mac, activate the existing environment and run:
 
@@ -39,6 +43,9 @@ Memory uses SQLite WAL, BM25 and real semantic vectors, with hard limits of
 project facts and sessions use the current directory. Ask Orbi to remember a
 fact, or start a new prompt in a project to retrieve its context. Phase 1 tools
 are `remember` and `recall`; other lanes and general file/shell tools come later.
+For explicitly delimited exact facts, `remember` checks the source before saving,
+retries a mismatch once with a diff, then fails if the copied text still differs.
+This check recognizes explicit source delimiters, not arbitrary natural-language wording.
 Ctrl-C saves partial state and exits 130. Orbs appear only on a terminal.
 
 `orbi --backup` writes a verified SQLite snapshot and markdown mirror to

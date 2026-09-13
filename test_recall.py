@@ -9,6 +9,7 @@ import re
 import sqlite3
 import time
 import unicodedata
+import urllib.request
 import uuid
 
 from benchmark import chat
@@ -185,6 +186,14 @@ def main():
                     {"role": "user", "content": "Retrieved memories:\n" + retrieved["text"]
                      + "\n\nQuestion: " + case["query"]}], max_tokens=64)
                 row["response"] = response
+                with urllib.request.urlopen(results["generation_url"] + "/slots", timeout=5) as live:
+                    slots = json.load(live)
+                if len(slots) != 1 or slots[0]["is_processing"]:
+                    raise RuntimeError("Cannot verify the completed single-slot recall request")
+                params = slots[0]["params"]
+                if params["temperature"] != 0 or params["top_p"] != 1 or params["samplers"] != ["temperature"]:
+                    raise RuntimeError(f"Effective decoding is not greedy: {params}")
+                row["effective_sampling"] = params
                 answer = response["choices"][0]["message"]["content"]
                 row["answer"] = answer
                 row["correct"] = normalize(answer) in {normalize(a) for a in case["answers"]}

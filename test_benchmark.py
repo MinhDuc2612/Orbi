@@ -81,6 +81,24 @@ def main():
         function["arguments"] = json.dumps(args)
     result = run_http(routing + wrong, lambda: b.quality("http://unused"))
     assert result["tool_validity"] == 20 and result["tool_exact"] == 18
+    for repair in (True, False):
+        responses = list(routing)
+        for index, response in enumerate(wrong):
+            responses.append(response)
+            if index in (6, 11):
+                responses.append(calls[index] if repair else response)
+        result = run_http(responses, lambda: b.quality("http://unused", retry_tools=True, validate_regex=True))
+        assert result["tool_exact"] == 18 and result["tool_retries"] == 2
+        assert result["tool_post_retry_exact"] == result["tool_accepted"] == (20 if repair else 18)
+        assert result["passed"] == repair
+    responses = [*routing, *wrong[:7], RuntimeError("retry transport failed"),
+                 *wrong[7:12], calls[11], *wrong[12:]]
+    with patch.object(b, "chat", side_effect=responses):
+        with redirect_stdout(io.StringIO()):
+            result = b.quality("http://unused", retry_tools=True)
+    assert not result["tool_calls"][6]["post_retry_correct"]
+    assert not result["tool_calls"][6]["accepted"]
+    assert result["tool_exact"] == 18 and result["tool_post_retry_exact"] == result["tool_accepted"] == 19
     bad = deepcopy(calls)
     emitted = [r["choices"][0]["message"]["tool_calls"][0] for r in bad]
     emitted[0]["function"]["arguments"] = "{"

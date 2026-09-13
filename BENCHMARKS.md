@@ -808,3 +808,85 @@ Recall fixture SHA256 remains888ef490698581f985dc8e2486b321d32bc1bc5bc231dc93614
 before/after; tool fixture remainsfdcf669576169038916ba421e097ba9fee3854aae01873c5b6e6f25287e3e86d.
 The requested semantic subagent hit its usage limit before writing; the parent
 implemented and checked the fix locally. No root planning/research file was edited.
+
+### Stage2 — one verbatim retry did not improve accuracy
+
+The full frozen20-case recall suite remains **19/20**, with `recall-18` returning
+`UNKNOWN` even though Imani's fact is present. Worst retrieval39.20ms; all caps,
+scope and delete/restore checks pass, and the canonical fixture hash is unchanged.
+All18 existing real CLI checks also pass with the new before-write guard.
+
+The full Gemma DWQ tool suite is **18/20 first-pass, 18/20 after retry**, routing20/20,
+callable JSON20/20. Exactly2 retries were attempted (`t07`, `t12`); each repeated
+the same incorrect string and was rejected. Accepted calls18/20; benchmark process
+exited1. No emitted string was rewritten into a passing answer. Raw first attempts,
+source-derived diffs, retry requests/responses and remaining issues are preserved
+in `stage2-tools.json` and `stage2-tools-quality.json` under the session directory.
+The validator never reads a fixture answer key to construct feedback.
+
+The shared source-copy check recognizes explicit colon-delimited exact facts,
+newline-preserving instructions and the benchmark's explicit path/query delimiters;
+it is not a general parser of arbitrary prose. The CLI validates `remember.text`
+before saving, feeds back one diff, and fails nonzero if the correction still differs
+or no corrected tool call arrives. Other file/search tools remain benchmark-only.
+MLX retry history converts API argument strings to mappings and tool responses to
+the installed Gemma template's native fields, without changing first-pass inputs.
+
+A synthetic guard check initially raised `AssertionError` because it counted both
+the rejection and successful execution result as rejection feedback; its assertion
+now distinguishes those events. All guard/evaluator/MLX checks pass, including a
+transport failure that cannot count as a successful retry. Editable installation
+first failed with `pip._vendor.pyproject_hooks._impl.BackendUnavailable: Cannot import
+'setuptools.build_meta'` when build isolation was disabled. Re-running with the
+project's existing pinned isolated build backend succeeded; isolated imports and
+`pip check` pass. No model or runtime dependency version was changed.
+
+### Stage3 — regex validation rejects the error; accuracy remains unchanged
+
+| Fix stage | Recall | Exact first-pass | Exact post-retry | Retries | Accepted tools |
+| --- | --- | --- | --- | --- | --- |
+| Semantic slots + explicit greedy | 19/20 | 18/20 | Not attempted | 0 | Not measured |
+| One source-copy retry | 19/20 | 18/20 | 18/20 | 2 | 18/20 |
+| Source-copy retry + regex examples | 19/20 | 18/20 | 18/20 | 2 | 18/20 |
+
+Every stage ran all20 frozen recall cases and all20 frozen tool cases, plus
+all20 routing cases. Stage3 routing and callable JSON remain20/20. Its benchmark
+process exited1: the exact-argument gate still fails. `t07` still emits
+`^def [a-z_]+\(.` instead of `^def [a-z_]+\(`; the emitted pattern compiles but
+fails the required positive examples `def hello(` and `def _name(`. Negative
+examples cover a class, an invalid identifier and wrong case. Both first attempt
+and sole retry fail the copy and match checks. `t12` still omits the final period
+from `The demo title is "Orbi 🌐".` on both attempts. Neither wrong call is accepted.
+Validation checks compile/match in a one-second bounded subprocess; it never edits
+an argument. Match examples are separate annotations, not changes to the fixture.
+
+Final recall is19/20: `recall-18` still answers `UNKNOWN` despite the Imani fact
+being retrieved in position2. Worst retrieval34.46ms; at most12 items and1798
+rendered characters in this run. All caps, scope isolation,20 semantic queries
+and delete/restore pass. These runs retain the existing evaluation split:
+production IQ3_S + Harrier for recall, Gemma DWQ with the MLX adapter for tool
+accuracy. They are not new speed/ten-minute RAM qualification runs, and no model
+was promoted. Lane A remains provisional; Phase2 is still on hold.
+
+Final verification passed deterministic memory, evaluator, source-copy/regex,
+CLI rejection and MLX adapter checks. The real CLI suite passed all18 checks at
+Stage2; no CLI logic changed at Stage3. `pip check` passes. `./check.sh` exits0:
+Python3.12.13, `Device(gpu, 0)`, wired limit20480,132.63GB free, verified03:00 backup.
+README now states the guard's behavior and unchanged scores.
+
+Recall canonical SHA256 remains
+`888ef490698581f985dc8e2486b321d32bc1bc5bc231dc93614c7a309889090d`
+before/after every run. Tool fixture SHA256 remains
+`fdcf669576169038916ba421e097ba9fee3854aae01873c5b6e6f25287e3e86d`.
+The final audit checks all60 saved first-pass tool requests against the frozen
+prompts and schemas and verifies argmax/temp0/top_p1 for every tool attempt.
+An initial audit raised `KeyError: 'fixture_sha256_after'`: Stage1 predates that
+metadata field. The corrected audit checks its saved before hash, every saved
+first-pass input and the current file; Stage2/3 also have matching after hashes.
+No historical result file was rewritten to fill in missing metadata.
+
+Raw Stage3 responses, retry diffs and failures are under
+`.session/quality-fixes-20260913/stage3-tools-quality.json`; recall evidence is in
+`stage3-recall.json` and the integrity audit is `final-validation.json` beside it.
+The four root planning/memory files match their pre-run hashes. This session is
+logged here, inside code/, respecting the explicit prohibition on editing them.
