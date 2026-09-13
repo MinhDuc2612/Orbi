@@ -14,6 +14,7 @@ import uuid
 from benchmark import chat
 from memory import Memory
 
+FIXTURE_SHA256 = "888ef490698581f985dc8e2486b321d32bc1bc5bc231dc93614c7a309889090d"
 
 # Freeze facts, questions, aliases and scoring before any embedding or answer request.
 # These fictional fixtures are test inputs; all vectors and answers are real model outputs.
@@ -120,6 +121,8 @@ def main():
         scoring="Exact equality after NFKD/casefold/accent removal and punctuation-to-space normalization; frozen aliases only.")
     assert len(fixtures["pairs"]) == 20
     fixture_hash = hashlib.sha256(json.dumps(fixtures, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    if fixture_hash != FIXTURE_SHA256:
+        raise ValueError(f"Frozen recall fixture changed: {fixture_hash}")
     save(run / "fixtures.json", fixtures)  # Must precede every model request.
     print(f"Frozen 20 recall pairs: {fixture_hash}", flush=True)
     results = dict(fixture_hash=fixture_hash, fixture_path=str(run / "fixtures.json"),
@@ -203,6 +206,12 @@ def main():
             and results["scope_passed"] and results["backup_restore"]["passed"] and not results["errors"])
     except Exception as error:
         results["errors"].append(dict(stage="setup_or_restore", error=repr(error)))
+    restored_fixture = json.loads((run / "fixtures.json").read_text())
+    final_hash = hashlib.sha256(json.dumps(restored_fixture, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    if final_hash != FIXTURE_SHA256:
+        results["passed"] = False
+        results["errors"].append(dict(stage="fixture_verification", error=f"Frozen recall fixture changed: {final_hash}"))
+    results["fixture_hash_after"] = final_hash
     record()
     print(json.dumps({k: v for k, v in results.items() if k not in ("answers", "backup_restore")}, indent=2), flush=True)
     return 0 if results["passed"] else 1

@@ -25,7 +25,7 @@ def strict_json(text):
 
 
 def chat(url, messages, **options):
-    body = dict(messages=messages, temperature=0, seed=42, max_tokens=256,
+    body = dict(messages=messages, temperature=0, top_p=1, samplers=["temperature"], seed=42, max_tokens=256,
                 cache_prompt=False, stream=False)
     body.update(options)
     request = urllib.request.Request(

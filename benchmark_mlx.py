@@ -182,7 +182,7 @@ class MLXChat:
             tool_arguments_constrained=False,
             timing_policy="post-first-yield tokens / observed elapsed including final GPU drain; native TPS also retained",
             tool_parser=(self.tokenizer.tool_parser.__module__ if self.tokenizer.tool_parser else None),
-            thinking_enabled=False, temperature=0, seed=42,
+            thinking_enabled=False, temperature=0, top_p=1, sampling="argmax", seed=42,
             weight_provenance="DWQ provenance and weight hashes must be verified separately",
             maximum_observed_prompt_tokens=0, maximum_observed_total_tokens=0,
             generation_errors=[],
@@ -192,6 +192,7 @@ class MLXChat:
     def __call__(self, unused_url, messages, **options):
         import mlx.core as mx
         from mlx_lm import stream_generate
+        from mlx_lm.sample_utils import make_sampler
 
         unknown = options.keys() - {"max_tokens", "response_format", "tools", "tool_choice",
                                     "parallel_tool_calls"}
@@ -215,6 +216,7 @@ class MLXChat:
             self.model, self.tokenizer, prompt, max_tokens=max_tokens,
             prompt_cache=caches, prefill_step_size=128,
             logits_processors=processors,
+            sampler=make_sampler(temp=0, top_p=1),
             # Caches are quantized before prefill; no rotating-cache conversion.
             kv_bits=8, kv_group_size=64, quantized_kv_start=0,
         )
@@ -259,6 +261,7 @@ class MLXChat:
                             kv_cache_types=[type(c).__name__ for c in caches],
                             tool_parse_error=parse_error),
                 request=dict(messages=messages, options=options, prompt_tokens=len(prompt),
+                             effective_sampling=dict(temperature=0, top_p=1, sampler="argmax"),
                              response_format_enforced=bool(response_format),
                              parallel_tool_calls_enforced=False),
             )
@@ -346,6 +349,7 @@ def self_check():
     adapter.tokenizer.apply_chat_template = lambda *a, **k: [1, 2]
     def synthetic_generate(*args, **kwargs):
         assert all(c.bits == 8 for c in kwargs["prompt_cache"])
+        assert kwargs["sampler"](mx.array([[1., 3., 2.]])).item() == 1
         for i, chunk in enumerate(['```json\n', '{}', '\n```'], 1):
             yield SimpleNamespace(text=chunk, token=i, generation_tokens=i,
                                   generation_tps=30, finish_reason="stop" if i == 3 else None,

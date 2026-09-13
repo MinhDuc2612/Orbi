@@ -339,7 +339,8 @@ def fit_messages(config, system, memory_text, previous, current):
 
 def stream_reply(config, messages, task):
     body = dict(messages=messages, tools=TOOLS, tool_choice="auto", parallel_tool_calls=False,
-                temperature=0, seed=42, max_tokens=512, stream=True, cache_prompt=False)
+                temperature=0, top_p=1, samplers=["temperature"], seed=42,
+                max_tokens=512, stream=True, cache_prompt=False)
     request = urllib.request.Request(url(config) + "/v1/chat/completions",
         json.dumps(body).encode(), {"Content-Type": "application/json"})
     message = {"role": "assistant", "content": ""}

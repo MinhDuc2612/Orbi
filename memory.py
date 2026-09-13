@@ -311,6 +311,9 @@ class Memory:
         # Bootstrap from at most two relevant high-level memories, then retrieve details.
         bootstrap = [i for i in ordered if rows[i]["tier"] in ("L2", "L3")][:2]
         ordered = bootstrap + [i for i in ordered if i not in bootstrap]
+        # Protect vector-only matches from two-list RRF/bootstrapping crowd-out.
+        reserved = [i for i in semantic if i in rows][:min(3, self.max_items)]
+        ordered = reserved + [i for i in ordered if i not in reserved]
         items, blocks, used = [], [], 0
         for row_id in ordered:
             if len(items) >= self.max_items:

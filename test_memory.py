@@ -96,6 +96,23 @@ def main():
             result = checked_retrieve(memory, "topic11")
             assert {r["tier"] for r in result["items"]} == {"L0", "L1", "L2", "L3"}
             assert {r["tier"] for r in result["items"][:2]} == {"L2", "L3"}
+            # Three L1 semantic-only hits beat 18 lower-similarity lexical L3 hits.
+            crowded = m.Memory(root / "crowded.sqlite3")
+            semantic_only = [crowded.add(f"topic50 answer {i}", scope="global") for i in range(3)]
+            for i in range(18):
+                crowded.add(f"topic50 topic51 checklist {i}", scope="global", tier="L3")
+            query_vector = synthetic_vector(None, "topic50", 1)
+            with patch.object(m, "_fetch_embedding", return_value=query_vector):
+                result = checked_retrieve(crowded, "checklist")
+                ids = [r["id"] for r in result["items"]]
+                assert set(ids[:3]) == set(semantic_only) and len(ids) == len(set(ids)) == 12
+                crowded.max_items = 2
+                assert len(checked_retrieve(crowded, "checklist")["items"]) == 2
+                crowded.max_items = 12
+            with patch.object(m, "_fetch_embedding", side_effect=RuntimeError("offline")):
+                result = checked_retrieve(crowded, "checklist")
+                assert len(result["items"]) == 12 and not result["semantic_used"]
+                assert not set(semantic_only) & {r["id"] for r in result["items"]}
             with closing(sqlite3.connect(memory.db_path, isolation_level=None)) as locked:
                 locked.execute("PRAGMA locking_mode=EXCLUSIVE")
                 locked.execute("BEGIN EXCLUSIVE")

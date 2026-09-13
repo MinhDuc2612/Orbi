@@ -784,3 +784,27 @@ canonical JSON (`sort_keys=True, ensure_ascii=False`), and that comparison passe
 The independent replay first raised `ImportError: cannot import name 'granite' from
 'mlx_lm.tool_parsers'`; using the saved metadata's actual `json_tools` parser made
 all replays pass. Neither error is a failed model gate or evidence of data loss.
+
+## Recall and exact-argument fixes — 2026-09-13
+
+Stage1 reserves the top3 semantic hits ahead of bootstrap/RRF, deduplicates, then
+fills using the existing order. All12-item/4000-character/300-ms caps and scope
+filters remain. Synthetic crowd-out, short-result, fallback and memory checks pass.
+The full frozen recall suite still scores **19/20**, missing `recall-18`; worst
+retrieval35.13ms. Unlike the old run, **Imani is now retrieved in position2**
+(cosine0.481752, semantic rank2), but Gemma IQ3_S still replies `UNKNOWN`. The
+retrieval omission is fixed; the end-to-end score is not improved. All20 semantic
+queries, scope checks and delete/restore pass. Evidence: `.session/quality-fixes-20260913/`.
+
+Greedy decoding was already active: installed MLX `generate_step` defaults to
+argmax, and llama.cpp requests already sent temperature0. Both are now explicit
+about top_p1; llama.cpp uses only its temperature sampler, MLX passes its verified
+argmax sampler. The live llama.cpp chat slot confirms temperature0, top_p1 and
+`samplers=["temperature"]`; effective parameters are saved for every recall answer.
+The complete frozen DWQ run still scores routing20/20, callable JSON20/20 and
+**first-pass exact arguments18/20** (`t07`, `t12` fail). Explicit greedy decoding
+does not improve the score. Every tool response records effective argmax/top_p1.
+Recall fixture SHA256 remains888ef490698581f985dc8e2486b321d32bc1bc5bc231dc93614c7a309889090d
+before/after; tool fixture remainsfdcf669576169038916ba421e097ba9fee3854aae01873c5b6e6f25287e3e86d.
+The requested semantic subagent hit its usage limit before writing; the parent
+implemented and checked the fix locally. No root planning/research file was edited.
