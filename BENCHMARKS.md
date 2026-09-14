@@ -1017,3 +1017,131 @@ The raw tool log also retains a macOS diagnostic, `MallocStackLogging: can't tur
 off malloc stack logging because it was not enabled.` It did not stop generation
 or cause a failed check. README reflects the measured post-retry success; no model
 promotion or Phase 2 implementation was performed.
+
+## Phase 2 routing — initial dispatch failure, 2026-09-14
+
+The unchanged coarse classifier scored **20/20**, but the first product routing
+implementation scored **15/20** on final lane selection. All 20 requests went
+through the installed Gemma IQ3_S runtime, the complete catalog selection and
+SQLite decision log. The five misses were:
+
+| Case | Expected lane | Actual lane/model | Cause |
+| --- | --- | --- | --- |
+| r10 | B | C / Qwen3.6-35B-A3B | Generic catalog embedding default overrode the plan's dedicated specialist |
+| r11 | B | C / Kimi K3 | Catalog has no translation leaf; nearest correspondence leaf selected a giant |
+| r15 | B | C / InternVL3.5-241B-A28B | Generic grounding default overrode the plan's smaller grounding specialist |
+| r16 | B | C / Qwen3.6-35B-A3B | Generic reranking default overrode the plan's dedicated reranker |
+| r17 | C | B / Qwen3.5-27B | Named minimum-viable proof model moved the request to B |
+
+The 302-leaf catalog is a research snapshot, not ground truth. Dispatch was
+corrected to honor the explicit `Orbimodels.md` specialist job models for B
+operations where no named leaf alternative exists. Named minimum-viable
+alternatives retain priority; the original catalog pick and the reason for any
+override remain in each decision. The r17 outcome is not forced back to C to
+match the fixture. This section records the failed run; a later result must be
+measured separately.
+
+Initial routing latency was 304.19 seconds across 20 decisions (15.21 seconds
+mean), excluding answer generation. The bounded three-call classifier does not
+meet the plan's unmeasured 0.2-second estimate. Wired limit was 20480 before the
+run. Raw decisions, responses, outcomes and token counts are preserved at
+`.session/routing-8fffc4ae3b8241128c2c73e86b3c41dd/results.json`.
+
+No B/C weights were downloaded or executed. Unavailable asks returned exit 3;
+their `succeeded` field is null. Frozen fixture hashes stayed unchanged.
+
+## Phase 2 routing — corrected dispatch, 2026-09-14
+
+Final product routing scores **19/20** on the full frozen r-cases; the existing
+coarse classifier remains **20/20**. Final scoring requires both the expected
+category and lane, and separately records each score. **r17 is the only miss**:
+the frozen case expects C, but the selected proof leaf explicitly names
+Qwen3.5-27B as its minimum-viable choice, so the capacity default sends it to B.
+Its suitability is not independently proven by this routing test. The smaller
+model preference was preserved; the fixture was not edited to count it as a pass.
+
+All other requests selected the expected lane. Six A requests completed local
+generation and recorded `succeeded=1`. Fourteen B/C decisions returned truthful
+not-installed output and exit 3, with `succeeded=null`. No specialist inference
+or replacement weights were used. The actual model was the installed Gemma
+UD-IQ3_S checkpoint, with the unchanged `--cache-ram 0` runtime configuration.
+
+Measured mean routing latency is **15.71 seconds**, excluding answer generation;
+the largest individual classification prompt was 1,073 tokens. All three calls
+remain within the existing 4,096-token context. This is a bounded implementation,
+not verification of the plan's 0.2-second estimate or of specialist model fit.
+Wired limit was confirmed 20480 before the run. Raw final evidence:
+`.session/routing-6f3eba70b3df406993fb651a734c426b/results.json` and
+`.session/phase2-20260914/routing-final.json`.
+
+One actual persisted decision:
+
+```text
+task: a1543a83e56c4fdbaf1ef563e65d85a2
+request: extract the line-item table from a scanned invoice
+skill: d04.s01.l06 — receipt/invoice line-item parsing
+lane: B
+model: PaddlePaddle/PaddleOCR-VL-1.6
+status: not_installed
+succeeded: null
+```
+
+The classifier identifies scanned-document extraction, then the specific invoice
+leaf. Dispatch uses the explicit `Orbimodels.md` OCR specialist, preserves the
+catalog's GLM-OCR pick and reasoned-default status, and records why the plan
+default took precedence. This is inspectable provenance, not a newly verified
+model-quality result. Decisions are project-scoped in the CLI and included in
+SQLite backups; deterministic controls verified restore, failure, cancellation,
+crash recovery and deferred-job persistence.
+
+## Phase 2 Phase 1 regressions — 2026-09-14
+
+| Suite / backend | First-pass | Post-retry | Retries | Result |
+| --- | --- | --- | --- | --- |
+| Frozen recall / IQ3_S + Harrier | 20/20 | n/a | 0 | Pass |
+| Answer-removed abstention / IQ3_S | 20/20 | n/a | 0 | Pass |
+| Frozen tools / installed IQ3_S | **17/20** | **20/20** | 3: t07, t09, t12 | Post-retry gate passes |
+| Frozen tools / recorded DWQ MLX backend | **18/20** | **20/20** | 2: t07, t12 | Recorded scores preserved |
+
+Both tool backends also score callable JSON20/20 and coarse routing20/20.
+The installed IQ3 first-pass result is lower than the18/20 stated in the task;
+that earlier result belongs to DWQ. Do not present them as one measurement.
+IQ3 additionally dropped the final period in t09's exact fact; its single retry
+restored it. Neither backend has a remaining post-retry failure, and no emitted
+argument was repaired in code.
+
+Recall includes the Imani Tran case, all scope/cap checks, and actual deletion
+and restoration of the isolated30-row database with identical vectors. Maximum
+retrieval was43.30ms; all requests stayed within12items/4000chars/300ms. All20
+separate absent-answer checks returned UNKNOWN. All18 existing real CLI/control
+checks and the new installed-command checks passed (forcedA/pipes, auto specialist
+preview, explanation/inspection, and deferredC submission). Phase1 memory, caps,
+system policy, runtime and stream implementation remain unchanged from779d2ef.
+
+The combined test runner exited1 **after** IQ3 inference completed while saving
+its result: `OSError: Could not verify /Users/minhduc/Orbi/code/.session/phase2-20260914/final/product-iq3-tools.json.tmp`.
+Regex example tuples become JSON arrays, so the writer's strict Python equality
+check failed. The complete raw JSON was recovered, all20 prompts/schemas and
+scores verified, and identical data published after normalizing metadata to
+JSON-native lists. No model output was altered or attempt repeated. The ignored
+harness was fixed; recovery SHA/evidence is in `artifact-save-recovery.json`.
+The remaining DWQ suite was run separately and exited0. The final audit verifies
+all results independently instead of treating that first runner exit as a pass.
+
+Raw evidence is under `.session/phase2-20260914/final/`:
+`recall.json`, `abstention.json`, `cli.json`, `product-iq3-tools.json`,
+`tools-quality.json`, and `tools.json`; new CLI transcripts are in the sibling
+`commands/results.json`. All model work ran offline; no weights were downloaded.
+
+`./check.sh` exits0: Python3.12.13, `Device(gpu, 0)`, wired limit20480,
+122.40GB free on the data volume, and verified03:00 backup registration.
+Before/after fixture SHA256 values are unchanged:
+
+- Recall: `888ef490698581f985dc8e2486b321d32bc1bc5bc231dc93614c7a309889090d`
+- Routing/tools: `fdcf669576169038916ba421e097ba9fee3854aae01873c5b6e6f25287e3e86d`
+
+`test_recall.py` is byte-for-byte unchanged. The three spec documents and skill
+source also retain their before hashes; CLAUDE.md was appended and committed in
+the separate root repository as work progressed. The source count302 versus341,
+missing translation leaf, and15.71s measured routing versus the plan's0.2s estimate
+remain explicit limitations, not silent spec edits.

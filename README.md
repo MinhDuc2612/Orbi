@@ -20,6 +20,13 @@ Regex feedback identifies the failed target and explains when a trailing wildcar
 requires an extra character; emitted arguments are never repaired by code.
 The top three semantic hits remain protected and greedy decoding is verified.
 
+Phase 2 validation on 2026-09-14: routing **19/20** (r17 selects the named smaller
+proof model in B rather than the fixture's C); recall and abstention **20/20**.
+The installed IQ3 model measures tool arguments **17/20 first-pass, 20/20 after
+three retries**. The separate DWQ benchmark retains **18/20 first-pass, 20/20
+after two retries**. The earlier 18/20 figure must not be attributed to IQ3.
+Measured routing overhead averages **15.71 seconds**; B/C execution is unavailable.
+
 On this Mac, activate the existing environment and run:
 
 ```sh
