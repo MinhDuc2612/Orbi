@@ -5,7 +5,8 @@ and scoped memory. Phase 1 uses Gemma 4 26B-A4B UD-IQ3_S with Harrier embeddings
 Lane A measured 29.3336 tok/s; recall now scores 20/20. See [BENCHMARKS.md](BENCHMARKS.md).
 
 The Lane A DWQ retest scored Gemma 18/20 and Granite 14/20 on exact tool arguments.
-Gemma's two first-pass errors persist, so Lane A remains provisional and Phase 2 is on hold.
+Gemma still needs retries for two first-pass errors. Lane A remains provisional;
+Phase 2 has not started.
 The CLI continues to use the Phase 1 IQ3_S checkpoint; full retest measurements and
 startup memory warnings are recorded in [BENCHMARKS.md](BENCHMARKS.md).
 The two Gemma failures change punctuation inside valid string arguments. A tool-schema
@@ -13,8 +14,10 @@ grammar can enforce structure; it does not guarantee the requested string is cop
 The shared system prompt distinguishes exact text from request punctuation and
 matches retrieved facts by meaning. The 2026-09-13 run scores recall 20/20;
 all 20 separate checks with the answering fact removed correctly return `UNKNOWN`.
-Exact arguments score 18/20 first-pass and 19/20 after one retry per failed call.
-The fact's missing period is corrected on retry; the incorrect regex is still rejected.
+The 2026-09-14 run scores exact arguments 18/20 first-pass and 20/20 after one
+retry per failed call. Both punctuation errors are corrected by the model on retry.
+Regex feedback identifies the failed target and explains when a trailing wildcard
+requires an extra character; emitted arguments are never repaired by code.
 The top three semantic hits remain protected and greedy decoding is verified.
 
 On this Mac, activate the existing environment and run:

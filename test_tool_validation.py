@@ -73,6 +73,22 @@ def main():
     examples = [('def hello(', True), ('class Hello(', False), ('def 9bad(', False)]
     assert not regex_issues(pattern, examples)
     assert regex_issues(pattern + '.', examples)
+    failing = r'^log\(.'
+    diagnostic = regex_issues(failing, [('log(', True)])[0]
+    assert diagnostic['pattern'] == failing and diagnostic['text'] == 'log('
+    feedback = retry_feedback([diagnostic])
+    assert 'Your pattern ' + failing in feedback
+    assert 'requires one more character after "("' in feedback and 'log(x' in feedback
+    assert 'Re-emit the pattern that matches the intended targets.' in feedback
+    assert failing == r'^log\(.'  # Diagnostic probes never rewrite an emitted pattern.
+    for literal_dot in (r'^log\(\.', r'^log\([.]'):
+        issue = regex_issues(literal_dot, [('log(', True)])[0]
+        assert 'requires one more character' not in issue['diagnostic']
+    for optional_or_comment in (r'^log\(.?', r'(?x)^log\( # comment.'):
+        assert not regex_issues(optional_or_comment, [('log(', True)])
+    assert 'requires one more character' not in regex_issues(r'^other.', [('log(', True)])[0]['diagnostic']
+    assert 'requires one more character' not in regex_issues(r'a(?=bx).', [('ab', True)])[0]['diagnostic']
+    assert 'incorrectly matches excluded target' in regex_issues(r'^log', [('log(', False)])[0]['diagnostic']
     assert regex_issues('(', examples)
     assert regex_issues(pattern, [])
     assert regex_issues(pattern, [('def hello(', 1)])

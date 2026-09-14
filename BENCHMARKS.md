@@ -962,3 +962,58 @@ hashes, separate abstention results and final integrity checks are preserved in
 `.session/prompt-rules-20260913/`; `final-audit.json` summarizes both stages.
 README reflects the final scores. The four root documents, memory implementation
 and cap configuration retain their before hashes; this session is logged here.
+
+## Actionable regex retry diagnostic — 2026-09-14
+
+| Measurement | Result |
+| --- | --- |
+| Exact arguments, first-pass | 18/20 |
+| Exact arguments, post-retry | 20/20 |
+| Retries | 2 total; one each for t07 and t12 |
+| Accepted calls | 20/20 |
+| Routing / callable JSON | 20/20 / 20/20 |
+| Frozen recall / separate abstention | 20/20 / 20/20 |
+
+The shared regex validator now includes the emitted pattern, each failing target,
+and a specific explanation in retry feedback. It recognizes a terminal wildcard
+using the pinned Python 3.12 parser and verifies the explanation by matching the
+unchanged pattern against the target with one extra character. This diagnostic
+stays inside the existing one-second subprocess limit. It does not change the
+pattern, the intended targets, the scorer, the system prompt or the retry limit.
+Synthetic checks cover escaped/class/optional dots, comments, excluded targets,
+and a lookahead counterexample where appending a character does not prove that
+the final wildcard consumed it. Focused checks and read-only review passed.
+
+`t07` first emitted `^def [a-z_]+\(.`. Its single retry received the explanation
+that the trailing dot requires another character after `(`, with `def hello(`
+and `def _name(` as the failing targets. **Gemma itself then emitted
+`^def [a-z_]+\(`**, visible in the retained native response, and passed exact
+arguments plus regex validation. `t12` also corrected its missing period on its
+single retry. No case fails after retry; first-pass accuracy remains 18/20.
+The full tool benchmark exited 0. No deterministic repair or additional model
+attempt was used to manufacture either pass.
+
+Both full frozen suites and all 20 target-removed abstention diagnostics were
+rerun. Recall remains 20/20 with no regression; every absent-answer diagnostic
+returns UNKNOWN. Retrieval, scope and delete/restore checks pass, with observed
+maxima of 12 items, 1798 characters and 41.86 ms. The 12/4000/300 caps are unchanged.
+Recall still uses the product IQ3_S runtime plus Harrier; tool accuracy uses the
+existing Gemma DWQ MLX adapter. No speed or ten-minute memory gate was re-measured.
+`./check.sh` exits 0: Python 3.12.13, `Device(gpu, 0)`, wired limit 20480,
+129.78 GB free and verified 03:00 backup registration.
+
+Both fixture SHAs match before and after:
+
+- Recall: `888ef490698581f985dc8e2486b321d32bc1bc5bc231dc93614c7a309889090d`
+- Tools: `fdcf669576169038916ba421e097ba9fee3854aae01873c5b6e6f25287e3e86d`
+
+The entire `test_recall.py`, product system prompt, inference adapters, scorer,
+memory implementation, cap configuration and four root documents are unchanged.
+All 20 first-pass tool requests match the preceding run byte-for-byte after JSON
+serialization. Temperature 0/top_p 1 and effective greedy sampling were verified.
+Raw responses, exact retry feedback, policy and integrity evidence are under
+`.session/regex-diagnostic-20260914/`; `final-audit.json` summarizes the results.
+The raw tool log also retains a macOS diagnostic, `MallocStackLogging: can't turn
+off malloc stack logging because it was not enabled.` It did not stop generation
+or cause a failed check. README reflects the measured post-retry success; no model
+promotion or Phase 2 implementation was performed.
