@@ -5,8 +5,8 @@ and scoped memory. Phase 1 uses Gemma 4 26B-A4B UD-IQ3_S with Harrier embeddings
 Lane A measured 29.3336 tok/s; recall now scores 20/20. See [BENCHMARKS.md](BENCHMARKS.md).
 
 The Lane A DWQ retest scored Gemma 18/20 and Granite 14/20 on exact tool arguments.
-Gemma still needs retries for two first-pass errors. Lane A remains provisional;
-Phase 2 has not started.
+Gemma still needs retries for two first-pass errors. Phase 2 adds routing decisions
+around this classifier; the serving model remains Gemma IQ3_S.
 The CLI continues to use the Phase 1 IQ3_S checkpoint; full retest measurements and
 startup memory warnings are recorded in [BENCHMARKS.md](BENCHMARKS.md).
 The two Gemma failures change punctuation inside valid string arguments. A tool-schema
@@ -26,6 +26,10 @@ On this Mac, activate the existing environment and run:
 source .venv/bin/activate
 ./check.sh
 orbi "Hello"
+orbi ask "Explain SQLite WAL briefly"
+orbi ask --lane a "Hello"
+orbi ask --explain "Extract the table from this scanned invoice"
+orbi job submit "Audit the architecture and propose a repair"
 orbi --continue
 printf 'Summarize this text' | orbi
 ```
@@ -40,6 +44,7 @@ python3.12 -m venv .venv
 ```
 
 Setup downloads and verifies the pinned runtime and two models (about 11.7 GB).
+Do not run setup to enable other lanes: Phase 2 downloads no models.
 Servers start locally on demand; `orbi --stop` releases them. The measured context
 limit is 4,096 tokens. Keep the server prompt cache disabled (`--cache-ram 0`).
 
@@ -73,6 +78,45 @@ Run `.venv/bin/python test_memory.py` for deterministic memory checks.
 `test_cli.py` and `test_recall.py` use the installed models and isolated test data;
 start the local services with one `orbi` prompt before running the recall test.
 Model files, databases, backups and runtime logs stay out of Git.
+
+`ask` uses the established classifier, then selects a group and a specific leaf
+from the research catalog. Three bounded calls keep the existing 4,096-token
+context; this is not the plan's unmeasured 0.2-second routing claim. Oversized
+requests fail visibly. Legacy `orbi "..."` and `orbi --continue` retain their
+direct Lane A behavior. `ask --continue` resumes with routing enabled.
+
+The source contains **302 leaves, not 341**. All are represented with stable IDs,
+source lines, historical evidence status and original/preferred model picks.
+Named min-viable alternatives take priority. The source's 46 verification tags
+are historical claims; other picks remain defaults, and unpicked leaves use
+the companion plan's named defaults. Specialist operations use the explicit
+`Orbimodels.md` job models where no leaf alternative exists, retaining the
+catalog pick and explaining any difference in the log. Ordinary assistance stays on resident
+Lane A. Specialist lane estimates are not RAM or quality qualifications.
+
+Only Lane A executes. B/C choices print `would route to <model> (Lane B) — not
+installed` (or Lane C) and exit **3**, without executing or substituting another
+model. `job submit` forces C and exits **0 once its deferred intent is saved**;
+Lane C remains parked pending external storage. No background execution or
+automatic completion is scheduled. A job ID is its decision ID.
+
+Every routed request records its task, project/session, skill, lane, model,
+reason, source status and outcome in SQLite `orbi_routes`. `succeeded` is true
+only after Lane A finishes, false on failure/cancellation/crash, and null for
+unexecuted decisions/jobs. These records are included in the existing database
+backups. No learning or reweighting uses the log.
+
+`--explain` prints the reason and decision ID to stderr. Inspect a decision
+later, from the same project directory, without starting any models:
+
+```sh
+orbi ask --decision DECISION_ID
+```
+
+Run `.venv/bin/python test_routing.py` for persistence and failure controls;
+`test_routing.py --live` measures all 20 unchanged r-cases through the product
+path using isolated data. It reports final lane accuracy separately from the
+classifier's category accuracy.
 
 Python is pinned to `>=3.12,<3.13`; `requirements.lock` pins the packages.
 See [BASELINE.md](BASELINE.md) for the recorded measurements and
